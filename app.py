@@ -713,7 +713,7 @@ app.jinja_env.filters["format_currency"] = format_currency
 # ── Bootstrap de la base de datos (protegido para no matar el proceso) ────────
 try:
     print("Iniciando bootstrap de la base de datos...")
-    bootstrap_database()
+    # bootstrap_database()
     print("Base de datos lista.")
 except Exception as e:
     print(f"ALERTA: No se pudo conectar a la DB al iniciar: {e}")
