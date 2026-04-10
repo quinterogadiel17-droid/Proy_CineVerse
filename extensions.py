@@ -30,5 +30,5 @@ class MySQL:
         return g.db_conn
 
 
-# ESTA LÍNEA ES VITAL: Crea el objeto que importa app.py
+# Objeto global que importa app.py
 mysql = MySQL()

@@ -21,10 +21,10 @@ from config import Config
 from extensions import mysql
 from services.asset_service import ensure_asset_directories, sync_asset_manifest
 
+# ── Única creación de la app ──────────────────────────────────────────────────
 app = Flask(__name__)
 app.config.from_object(Config)
-
-
+# ─────────────────────────────────────────────────────────────────────────────
 
 MESES_ES = {
     1: "enero",
@@ -200,9 +200,6 @@ def seed_movies(cursor, sede_ids):
 
         if row:
             movie_id = row[0]
-            # Solo actualiza imagen_url si la pelicula aun tiene la imagen
-            # de seed (SVG por defecto). Si el admin ya subio una imagen
-            # personalizada (guardada en /static/uploads/), la respetamos.
             cursor.execute(
                 "SELECT imagen_url FROM peliculas WHERE id = %s", (movie_id,)
             )
@@ -412,6 +409,7 @@ def bootstrap_database():
         host=Config.MYSQL_HOST,
         user=Config.MYSQL_USER,
         password=Config.MYSQL_PASSWORD,
+        port=int(Config.MYSQL_PORT),
     )
     cursor = connection.cursor()
 
@@ -661,6 +659,7 @@ def bootstrap_database():
     connection.close()
 
 
+# ── Filtros de Jinja ──────────────────────────────────────────────────────────
 def format_time(value):
     if value is None:
         return ""
@@ -698,22 +697,27 @@ def format_currency(value):
     return "$" + "{:,.0f}".format(float(value))
 
 
-app = Flask(__name__)
-app.config.from_object(Config)
 app.jinja_env.filters["format_time"] = format_time
 app.jinja_env.filters["format_date"] = format_date
 app.jinja_env.filters["format_short_date"] = format_short_date
 app.jinja_env.filters["format_currency"] = format_currency
 
-bootstrap_database()
+# ── Bootstrap de la base de datos (protegido para no matar el proceso) ────────
+try:
+    print("Iniciando bootstrap de la base de datos...")
+    bootstrap_database()
+    print("Base de datos lista.")
+except Exception as e:
+    print(f"ALERTA: No se pudo conectar a la DB al iniciar: {e}")
+
+# ── Inicializar extensión MySQL ───────────────────────────────────────────────
 mysql.init_app(app)
 
 
+# ── Helpers de contexto ───────────────────────────────────────────────────────
 def load_location_context():
-    # 1. Obtener y guardar la conexión
-    conn = mysql.connection 
-    # 2. Crear el cursor desde esa conexión
-    cur = conn.cursor(dictionary=True) 
+    conn = mysql.connection
+    cur = conn.cursor(dictionary=True)
 
     cur.execute("SELECT id, nombre FROM ciudades ORDER BY nombre")
     cities = cur.fetchall()
@@ -740,10 +744,10 @@ def load_location_context():
         selected_sede = cur.fetchone()
 
     cur.close()
-    # No cerramos 'conn' aquí porque inject_brand_context la usa después
     return cities, current_sedes, selected_city, selected_sede
 
 
+# ── Before-request hooks ──────────────────────────────────────────────────────
 @app.before_request
 def enforce_active_session_user():
     user_id = session.get("user_id")
@@ -833,31 +837,31 @@ def inject_brand_context():
     }
 
 
+# ── Rutas principales ─────────────────────────────────────────────────────────
 @app.route("/seleccionar-ubicacion", methods=["GET"])
 def choose_location():
     next_url = request.args.get("next", url_for("peliculas.cartelera"))
-    
+
     db_conn = mysql.connection
     cur = db_conn.cursor(dictionary=True)
-    
+
     try:
         cur.execute("SELECT id, nombre FROM ciudades ORDER BY nombre")
         cities = cur.fetchall()
 
         first_city_id = cities[0]["id"] if cities else None
         current_city_id = session.get("selected_city_id") or first_city_id
-        
+
         sedes = []
         if current_city_id:
-            cur.execute("SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre", (current_city_id,))
+            cur.execute(
+                "SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre",
+                (current_city_id,),
+            )
             sedes = cur.fetchall()
-            
     finally:
         cur.close()
-        # No cerramos db_conn aquí si usas el 'g' en extensions.py, 
-        # pero si no lo usas, asegúrate de que el return esté FUERA del try/finally
-    
-    # IMPORTANTE: Este return debe estar al mismo nivel de indentación que el 'try'
+
     return render_template(
         "select_location.html",
         cities=cities,
@@ -891,30 +895,21 @@ def update_location():
 
 @app.get("/api/ciudades/<int:city_id>/sedes")
 def api_city_sedes(city_id):
-    cur = mysql.connection.cursor(dictionary=True)  # ← esto faltaba
+    cur = mysql.connection.cursor(dictionary=True)
     cur.execute("SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre", (city_id,))
     sedes = cur.fetchall()
     cur.close()
     return jsonify(sedes)
 
 
-# Filtros de Jinja
-app.jinja_env.filters["format_time"] = format_time
-app.jinja_env.filters["format_date"] = format_date
-app.jinja_env.filters["format_short_date"] = format_short_date
-app.jinja_env.filters["format_currency"] = format_currency
+@app.route("/")
+def index():
+    if not session.get("selected_city_id"):
+        return redirect(url_for("choose_location"))
+    return redirect(url_for("peliculas.cartelera"))
 
-# --- BLOQUE DE INICIALIZACIÓN PROTEGIDO ---
-try:
-    print("Iniciando bootstrap de la base de datos...")
-    bootstrap_database()
-    print("Base de datos lista.")
-except Exception as e:
-    # Si falla la DB, imprimimos el error pero NO matamos la app
-    print(f"ALERTA: No se pudo conectar a la DB al iniciar: {e}")
 
-mysql.init_app(app)
-
+# ── Blueprints ────────────────────────────────────────────────────────────────
 from routes.admin import admin_bp
 from routes.auth import auth_bp
 from routes.funciones import funciones_bp
@@ -928,15 +923,6 @@ app.register_blueprint(admin_bp, url_prefix="/admin")
 app.register_blueprint(auth_bp)
 
 
-@app.route("/")
-def index():
-    if not session.get("selected_city_id"):
-        return redirect(url_for("choose_location"))
-    return redirect(url_for("peliculas.cartelera"))
-
-
-if __name__ == '__main__':
-    # Lee el puerto de la variable de entorno, si no existe usa el 5000 (local)
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    # '0.0.0.0' le dice a Flask que escuche conexiones externas (necesario en Render)
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port)
