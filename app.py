@@ -21,6 +21,10 @@ from config import Config
 from extensions import mysql
 from services.asset_service import ensure_asset_directories, sync_asset_manifest
 
+app = Flask(__name__)
+app.config.from_object(Config)
+
+
 
 MESES_ES = {
     1: "enero",
@@ -893,6 +897,23 @@ def api_city_sedes(city_id):
     cur.close()
     return jsonify(sedes)
 
+
+# Filtros de Jinja
+app.jinja_env.filters["format_time"] = format_time
+app.jinja_env.filters["format_date"] = format_date
+app.jinja_env.filters["format_short_date"] = format_short_date
+app.jinja_env.filters["format_currency"] = format_currency
+
+# --- BLOQUE DE INICIALIZACIÓN PROTEGIDO ---
+try:
+    print("Iniciando bootstrap de la base de datos...")
+    bootstrap_database()
+    print("Base de datos lista.")
+except Exception as e:
+    # Si falla la DB, imprimimos el error pero NO matamos la app
+    print(f"ALERTA: No se pudo conectar a la DB al iniciar: {e}")
+
+mysql.init_app(app)
 
 from routes.admin import admin_bp
 from routes.auth import auth_bp
