@@ -56,7 +56,11 @@ def send_email(subject, recipient, text_body, html_body=None, attachments: Optio
         if Config.MAIL_USE_TLS and not Config.MAIL_USE_SSL:
             server.starttls()
             server.ehlo()
-        server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+        try:
+            server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+        except Exception as e:
+            print("ERROR EMAIL:", e)
+            return False, str(e)
         server.send_message(message)
 
     return True, None
