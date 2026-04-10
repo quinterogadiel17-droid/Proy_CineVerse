@@ -24,6 +24,7 @@ class Config:
     MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "")
     MYSQL_DB       = os.getenv("DB_NAME",     "cinecol")
     MYSQL_PORT     = int(os.getenv("DB_PORT", "3306"))
+    MYSQL_SSL_CA   = os.getenv("DB_SSL_CA", "/etc/ssl/certs/ca-certificates.crt")
     MYSQL_CURSORCLASS = "DictCursor"
 
     PROJECT_ROOT = BASE_DIR
@@ -39,8 +40,10 @@ class Config:
     MAIL_SERVER   = os.getenv("MAIL_SERVER", "")
     MAIL_PORT     = int(os.getenv("MAIL_PORT", "587"))
     MAIL_USE_TLS  = env_bool("MAIL_USE_TLS", True)
+    MAIL_USE_SSL  = env_bool("MAIL_USE_SSL", False)
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM     = os.getenv("MAIL_FROM", "no-reply@cinecol.com")
+    MAIL_DEBUG    = env_bool("MAIL_DEBUG", False)
 
     QR_SCAN_INTERVAL_MS = int(os.getenv("QR_SCAN_INTERVAL_MS", "1200"))

@@ -47,9 +47,15 @@ def send_email(subject, recipient, text_body, html_body=None, attachments: Optio
             filename=attachment.get("filename", "archivo.bin"),
         )
 
-    with smtplib.SMTP(Config.MAIL_SERVER, Config.MAIL_PORT, timeout=20) as server:
-        if Config.MAIL_USE_TLS:
+    smtp_client = smtplib.SMTP_SSL if Config.MAIL_USE_SSL else smtplib.SMTP
+
+    with smtp_client(Config.MAIL_SERVER, Config.MAIL_PORT, timeout=20) as server:
+        if Config.MAIL_DEBUG:
+            server.set_debuglevel(1)
+        server.ehlo()
+        if Config.MAIL_USE_TLS and not Config.MAIL_USE_SSL:
             server.starttls()
+            server.ehlo()
         server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
         server.send_message(message)
 

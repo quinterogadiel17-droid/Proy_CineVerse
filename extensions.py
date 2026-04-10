@@ -14,6 +14,7 @@ class MySQL:
         app.config['MYSQL_PASSWORD'] = os.getenv('DB_PASSWORD', '')
         app.config['MYSQL_DB']       = os.getenv('DB_NAME',     'cinecol')
         app.config['MYSQL_PORT']     = os.getenv('DB_PORT',     '3306')
+        app.config['MYSQL_SSL_CA']   = os.getenv('DB_SSL_CA',   '/etc/ssl/certs/ca-certificates.crt')
 
     @property
     def connection(self):
@@ -25,7 +26,7 @@ class MySQL:
                     password=current_app.config['MYSQL_PASSWORD'],
                     database=current_app.config['MYSQL_DB'],
                     port=int(current_app.config['MYSQL_PORT']),
-                    ssl_ca="/etc/ssl/certs/ca-certificates.crt",
+                    ssl_ca=current_app.config.get('MYSQL_SSL_CA'),
                     connection_timeout=10,
                     autocommit=True
                 )
@@ -39,7 +40,7 @@ class MySQL:
                         password=current_app.config['MYSQL_PASSWORD'],
                         database=current_app.config['MYSQL_DB'],
                         port=int(current_app.config['MYSQL_PORT']),
-                        ssl_ca="/etc/ssl/certs/ca-certificates.crt",
+                        ssl_ca=current_app.config.get('MYSQL_SSL_CA'),
                         connection_timeout=10,
                         autocommit=True
                     )

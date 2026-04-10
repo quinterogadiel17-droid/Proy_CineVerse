@@ -50,4 +50,8 @@ Nombre de imagen: robot-salvaje.svg
 Ruta: /static/img/posters/robot-salvaje.svg
 Descripcion: Poster principal de Robot Salvaje
 Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------Nombre de imagen: ffc76ac8e13143fead1c2dc420f56a82.png
+Ruta: /static/uploads/posters/ffc76ac8e13143fead1c2dc420f56a82.png
+Descripcion: Poster subido manualmente desde el panel admin
+Ubicacion en UI: Modulo admin de peliculas y cartelera publica
 ----------------------------------------

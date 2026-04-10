@@ -418,6 +418,8 @@ def bootstrap_database():
         user=Config.MYSQL_USER,
         password=Config.MYSQL_PASSWORD,
         port=int(Config.MYSQL_PORT),
+        ssl_ca=Config.MYSQL_SSL_CA,
+        connection_timeout=10,
     )
     cursor = connection.cursor()
 
@@ -712,9 +714,9 @@ app.jinja_env.filters["format_currency"] = format_currency
 
 # ── Bootstrap de la base de datos (protegido para no matar el proceso) ────────
 try:
-    if os.environ.get("RENDER") != "true":
+    if os.environ.get("RUN_DB_BOOTSTRAP", "").strip().lower() == "true":
         bootstrap_database()
-    print("Base de datos lista.")
+        print("Base de datos inicializada por RUN_DB_BOOTSTRAP=true.")
 except Exception as e:
     print(f"ALERTA: No se pudo conectar a la DB al iniciar: {e}")
 
