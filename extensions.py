@@ -1,3 +1,4 @@
+import os
 import mysql.connector as mysql_driver
 from flask import current_app, g
 
