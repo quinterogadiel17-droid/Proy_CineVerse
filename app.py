@@ -24,6 +24,14 @@ from services.asset_service import ensure_asset_directories, sync_asset_manifest
 # ── Única creación de la app ──────────────────────────────────────────────────
 app = Flask(__name__)
 app.config.from_object(Config)
+
+from flask import g
+
+@app.teardown_appcontext
+def close_db_connection(exception=None):
+    db = g.pop('db_conn', None)
+    if db is not None and db.is_connected():
+        db.close()
 # ─────────────────────────────────────────────────────────────────────────────
 
 MESES_ES = {

@@ -17,17 +17,38 @@ class MySQL:
 
     @property
     def connection(self):
-        if 'db_conn' not in g or not g.db_conn.is_connected():
-            g.db_conn = mysql_driver.connect(
-                host=current_app.config['MYSQL_HOST'],
-                user=current_app.config['MYSQL_USER'],
-                password=current_app.config['MYSQL_PASSWORD'],
-                database=current_app.config['MYSQL_DB'],
-                port=int(current_app.config['MYSQL_PORT']),
-                ssl_disabled=False,
-                connection_timeout=10,
-            )
-        return g.db_conn
+        try:
+            if 'db_conn' not in g:
+                g.db_conn = mysql_driver.connect(
+                    host=current_app.config['MYSQL_HOST'],
+                    user=current_app.config['MYSQL_USER'],
+                    password=current_app.config['MYSQL_PASSWORD'],
+                    database=current_app.config['MYSQL_DB'],
+                    port=int(current_app.config['MYSQL_PORT']),
+                    ssl_ca="/etc/ssl/certs/ca-certificates.crt",
+                    connection_timeout=10,
+                    autocommit=True
+                )
+            else:
+                try:
+                    g.db_conn.ping(reconnect=True, attempts=3, delay=2)
+                except:
+                    g.db_conn = mysql_driver.connect(
+                        host=current_app.config['MYSQL_HOST'],
+                        user=current_app.config['MYSQL_USER'],
+                        password=current_app.config['MYSQL_PASSWORD'],
+                        database=current_app.config['MYSQL_DB'],
+                        port=int(current_app.config['MYSQL_PORT']),
+                        ssl_ca="/etc/ssl/certs/ca-certificates.crt",
+                        connection_timeout=10,
+                        autocommit=True
+                    )
+            return g.db_conn
+
+        except Exception as e:
+            print("ERROR CONECTANDO A MYSQL:", e)
+            raise
+
 
 
 # Objeto global que importa app.py
