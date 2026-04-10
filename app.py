@@ -914,5 +914,8 @@ def index():
     return redirect(url_for("peliculas.cartelera"))
 
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+if __name__ == '__main__':
+    # Lee el puerto de la variable de entorno, si no existe usa el 5000 (local)
+    port = int(os.environ.get("PORT", 5000))
+    # '0.0.0.0' le dice a Flask que escuche conexiones externas (necesario en Render)
+    app.run(host='0.0.0.0', port=port)
