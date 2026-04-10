@@ -19,10 +19,11 @@ BASE_DIR = Path(__file__).resolve().parent
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "cinecol-secret-2024-adso18")
 
-    MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
-    MYSQL_USER = os.getenv("MYSQL_USER", "root")
-    MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
-    MYSQL_DB = os.getenv("MYSQL_DB", "cinecol")
+    MYSQL_HOST     = os.getenv("DB_HOST",     "localhost")
+    MYSQL_USER     = os.getenv("DB_USER",     "root")
+    MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "")
+    MYSQL_DB       = os.getenv("DB_NAME",     "cinecol")
+    MYSQL_PORT     = int(os.getenv("DB_PORT", "3306"))
     MYSQL_CURSORCLASS = "DictCursor"
 
     PROJECT_ROOT = BASE_DIR
@@ -35,11 +36,11 @@ class Config:
     APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5000")
     EMAIL_TOKEN_SALT = os.getenv("EMAIL_TOKEN_SALT", "cinecol-email-confirmation")
 
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
-    MAIL_USE_TLS = env_bool("MAIL_USE_TLS", True)
+    MAIL_SERVER   = os.getenv("MAIL_SERVER", "")
+    MAIL_PORT     = int(os.getenv("MAIL_PORT", "587"))
+    MAIL_USE_TLS  = env_bool("MAIL_USE_TLS", True)
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
-    MAIL_FROM = os.getenv("MAIL_FROM", "no-reply@cinecol.com")
+    MAIL_FROM     = os.getenv("MAIL_FROM", "no-reply@cinecol.com")
 
     QR_SCAN_INTERVAL_MS = int(os.getenv("QR_SCAN_INTERVAL_MS", "1200"))
