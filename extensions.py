@@ -8,21 +8,25 @@ class MySQL:
             self.init_app(app)
 
     def init_app(self, app):
-        app.config.setdefault('MYSQL_HOST', 'localhost')
-        app.config.setdefault('MYSQL_USER', 'root')
-        app.config.setdefault('MYSQL_PASSWORD', '')
-        app.config.setdefault('MYSQL_DB', 'database')
+        # Lee las variables de entorno (Render/Aiven). Si no existen, usa local.
+        app.config.setdefault('MYSQL_HOST', os.getenv('DB_HOST', 'localhost'))
+        app.config.setdefault('MYSQL_USER', os.getenv('DB_USER', 'root'))
+        app.config.setdefault('MYSQL_PASSWORD', os.getenv('DB_PASSWORD', ''))
+        app.config.setdefault('MYSQL_DB', os.getenv('DB_NAME', 'defaultdb'))
+        app.config.setdefault('MYSQL_PORT', os.getenv('DB_PORT', '3306'))
 
     @property
     def connection(self):
-        # Esto mantiene la conexión viva durante TODA la petición (request)
+        # Mantiene la conexión activa durante la petición
         if 'db_conn' not in g or not g.db_conn.is_connected():
             g.db_conn = mysql_driver.connect(
                 host=current_app.config['MYSQL_HOST'],
                 user=current_app.config['MYSQL_USER'],
                 password=current_app.config['MYSQL_PASSWORD'],
-                database=current_app.config['MYSQL_DB']
+                database=current_app.config['MYSQL_DB'],
+                port=int(current_app.config['MYSQL_PORT'])
             )
         return g.db_conn
 
+# ESTA LÍNEA ES VITAL: Crea el objeto que importa app.py
 mysql = MySQL()
