@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import timedelta
 
@@ -20,6 +21,8 @@ from catalog import (
 from config import Config
 from extensions import mysql
 from services.asset_service import ensure_asset_directories, sync_asset_manifest
+
+logger = logging.getLogger(__name__)
 
 # ── Única creación de la app ──────────────────────────────────────────────────
 app = Flask(__name__)
@@ -757,6 +760,14 @@ def load_location_context():
     return cities, current_sedes, selected_city, selected_sede
 
 
+def get_safe_location_context():
+    try:
+        return load_location_context()
+    except Exception as exc:
+        logger.warning("No se pudo cargar el contexto de ubicacion desde la DB: %s", exc)
+        return [], [], None, None
+
+
 # ── Before-request hooks ──────────────────────────────────────────────────────
 @app.before_request
 def enforce_active_session_user():
@@ -764,10 +775,16 @@ def enforce_active_session_user():
     if not user_id or request.endpoint == "static":
         return
 
-    cur = mysql.connection.cursor(dictionary=True)
-    cur.execute("SELECT id, nombre, rol, activo FROM usuarios WHERE id = %s", (user_id,))
-    user = cur.fetchone()
-    cur.close()
+    try:
+        cur = mysql.connection.cursor(dictionary=True)
+        cur.execute("SELECT id, nombre, rol, activo FROM usuarios WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        cur.close()
+    except Exception as exc:
+        logger.warning("No se pudo validar la sesion contra la DB: %s", exc)
+        if request.path.startswith("/api/") or request.path.startswith("/admin/api/"):
+            return jsonify({"error": "Servicio temporalmente no disponible."}), 503
+        return
 
     if not user or not user.get("activo", 1):
         session.clear()
@@ -804,6 +821,7 @@ def enforce_location_selection():
         "choose_location",
         "update_location",
         "api_city_sedes",
+        "healthz",
         "index",
         "auth.login",
         "auth.registro",
@@ -833,7 +851,7 @@ def enforce_location_selection():
 
 @app.context_processor
 def inject_brand_context():
-    cities, current_sedes, selected_city, selected_sede = load_location_context()
+    cities, current_sedes, selected_city, selected_sede = get_safe_location_context()
     return {
         "app_name": APP_NAME,
         "app_tagline": APP_TAGLINE,
@@ -847,30 +865,40 @@ def inject_brand_context():
     }
 
 
+@app.get("/healthz")
+def healthz():
+    return jsonify({"status": "ok"}), 200
+
+
 # ── Rutas principales ─────────────────────────────────────────────────────────
 @app.route("/seleccionar-ubicacion", methods=["GET"])
 def choose_location():
     next_url = request.args.get("next", url_for("peliculas.cartelera"))
-
-    db_conn = mysql.connection
-    cur = db_conn.cursor(dictionary=True)
+    cities = []
+    sedes = []
+    current_city_id = session.get("selected_city_id")
 
     try:
-        cur.execute("SELECT id, nombre FROM ciudades ORDER BY nombre")
-        cities = cur.fetchall()
+        db_conn = mysql.connection
+        cur = db_conn.cursor(dictionary=True)
 
-        first_city_id = cities[0]["id"] if cities else None
-        current_city_id = session.get("selected_city_id") or first_city_id
+        try:
+            cur.execute("SELECT id, nombre FROM ciudades ORDER BY nombre")
+            cities = cur.fetchall()
 
-        sedes = []
-        if current_city_id:
-            cur.execute(
-                "SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre",
-                (current_city_id,),
-            )
-            sedes = cur.fetchall()
-    finally:
-        cur.close()
+            first_city_id = cities[0]["id"] if cities else None
+            current_city_id = current_city_id or first_city_id
+
+            if current_city_id:
+                cur.execute(
+                    "SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre",
+                    (current_city_id,),
+                )
+                sedes = cur.fetchall()
+        finally:
+            cur.close()
+    except Exception as exc:
+        logger.warning("No se pudo cargar la pantalla de ubicacion desde la DB: %s", exc)
 
     return render_template(
         "select_location.html",
@@ -905,11 +933,15 @@ def update_location():
 
 @app.get("/api/ciudades/<int:city_id>/sedes")
 def api_city_sedes(city_id):
-    cur = mysql.connection.cursor(dictionary=True)
-    cur.execute("SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre", (city_id,))
-    sedes = cur.fetchall()
-    cur.close()
-    return jsonify(sedes)
+    try:
+        cur = mysql.connection.cursor(dictionary=True)
+        cur.execute("SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre", (city_id,))
+        sedes = cur.fetchall()
+        cur.close()
+        return jsonify(sedes)
+    except Exception as exc:
+        logger.warning("No se pudieron consultar sedes para la ciudad %s: %s", city_id, exc)
+        return jsonify({"error": "Servicio temporalmente no disponible."}), 503
 
 
 @app.route("/")
@@ -931,6 +963,10 @@ app.register_blueprint(funciones_bp)
 app.register_blueprint(tiquetes_bp)
 app.register_blueprint(admin_bp, url_prefix="/admin")
 app.register_blueprint(auth_bp)
+
+
+def create_app():
+    return app
 
 
 if __name__ == "__main__":
