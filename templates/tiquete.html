@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Tiquete {{ tiquete.codigo }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="ticket-layout">
+    <article class="ticket-card">
+      <div class="ticket-header">
+        <div>
+          <span class="eyebrow">Tiquete digital</span>
+          <h1>{{ app_name }}</h1>
+        </div>
+        <span id="ticketStatusChip" class="chip {% if tiquete.estado == 'activo' %}active{% else %}{{ tiquete.estado }}{% endif %}">
+          {{ tiquete.estado.upper() }}
+        </span>
+      </div>
+
+      <div class="ticket-body">
+        <div class="ticket-movie">
+          <img src="{{ tiquete.imagen_url }}" alt="{{ tiquete.titulo }}">
+          <div>
+            <h2>{{ tiquete.titulo }}</h2>
+            <p>{{ tiquete.ciudad_nombre }} · {{ tiquete.sede_nombre }}</p>
+            <span>{{ tiquete.fecha }} · {{ tiquete.hora }} · {{ tiquete.formato }} · {{ tiquete.sala }}</span>
+          </div>
+        </div>
+
+        <div id="ticketMessage" class="{% if tiquete.estado == 'cancelado' %}inline-error{% else %}inline-success{% endif %} ticket-status-note" {% if tiquete.estado != 'cancelado' %}style="display:none"{% endif %}>
+          {% if tiquete.estado == 'cancelado' %}
+            Esta reserva fue cancelada. Los asientos ya fueron liberados y el tiquete ya no es valido.
+          {% endif %}
+        </div>
+
+        <div class="ticket-grid">
+          <div class="ticket-line">
+            <span>Cliente</span>
+            <strong>{{ tiquete.nombre_cliente or 'Invitado' }}</strong>
+          </div>
+          <div class="ticket-line">
+            <span>Asientos</span>
+            <strong>{% if asientos %}{% for a in asientos %}{{ a.fila }}{{ a.columna }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}Sin asientos asignados{% endif %}</strong>
+          </div>
+          <div class="ticket-line">
+            <span>Boletas</span>
+            <strong>{{ tiquete.subtotal_boletas|format_currency }}</strong>
+          </div>
+          <div class="ticket-line">
+            <span>Snacks</span>
+            <strong>{{ tiquete.subtotal_comida|format_currency }}</strong>
+          </div>
+          <div class="ticket-line">
+            <span>Metodo de pago</span>
+            <strong>{{ tiquete.metodo_pago }} · {{ tiquete.referencia_pago }}</strong>
+          </div>
+          <div class="ticket-line">
+            <span>Compra</span>
+            <strong>{{ tiquete.fecha_compra.strftime('%d/%m/%Y %H:%M') if tiquete.fecha_compra else '' }}</strong>
+          </div>
+        </div>
+
+        {% if extras %}
+          <div class="ticket-extras" id="ticketExtras">
+            <h3>Combos incluidos</h3>
+            {% for extra in extras %}
+              <div class="ticket-line">
+                <span>{{ extra.name }} x{{ extra.qty }}</span>
+                <strong>{{ extra.total|format_currency }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <div class="ticket-qr">
+          <img src="data:image/png;base64,{{ qr }}" alt="QR Tiquete" width="180">
+          <p>{{ tiquete.codigo }}</p>
+        </div>
+      </div>
+
+      <div class="ticket-total">
+        Total pagado <strong>{{ tiquete.total|format_currency }}</strong>
+      </div>
+    </article>
+
+    <div class="ticket-actions">
+      {% if can_cancel %}
+        <button class="btn btn-danger" id="cancelTicketBtn" onclick="cancelarReserva()">Cancelar reserva</button>
+      {% endif %}
+      {% if tiquete.estado != 'cancelado' %}
+        <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
+      {% endif %}
+      <a href="{{ url_for('peliculas.cartelera') }}" class="btn btn-secondary">Volver a cartelera</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if can_cancel %}
+<script>
+const TICKET_CODE = {{ tiquete.codigo|tojson }};
+
+async function cancelarReserva() {
+  const confirmed = confirm('Cancelar esta reserva liberara todos los asientos seleccionados y dejara el tiquete sin validez. ¿Deseas continuar?');
+  if (!confirmed) return;
+
+  const button = document.getElementById('cancelTicketBtn');
+  const message = document.getElementById('ticketMessage');
+  button.disabled = true;
+  button.textContent = 'Cancelando...';
+
+  try {
+    const res = await fetch(`/api/tiquetes/${encodeURIComponent(TICKET_CODE)}/cancelar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      message.className = 'inline-error ticket-status-note';
+      message.textContent = data.error || 'No se pudo cancelar la reserva.';
+      message.style.display = 'block';
+      button.disabled = false;
+      button.textContent = 'Cancelar reserva';
+      return;
+    }
+
+    message.className = 'inline-success ticket-status-note';
+    message.textContent = data.mensaje;
+    message.style.display = 'block';
+    setTimeout(() => window.location.reload(), 900);
+  } catch (error) {
+    message.className = 'inline-error ticket-status-note';
+    message.textContent = 'No fue posible contactar el servidor para cancelar la reserva.';
+    message.style.display = 'block';
+    button.disabled = false;
+    button.textContent = 'Cancelar reserva';
+  }
+}
+</script>
+{% endif %}
+{% endblock %}

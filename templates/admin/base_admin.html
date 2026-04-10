@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="admin-layout">
+  <aside class="admin-sidebar">
+    <div class="sidebar-brand">
+      <span class="eyebrow">Panel oculto</span>
+      <strong>{{ app_name }} Admin</strong>
+    </div>
+
+    <a href="{{ url_for('admin.dashboard') }}" class="sidebar-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">Dashboard</a>
+    <a href="{{ url_for('admin.peliculas') }}" class="sidebar-link {% if request.endpoint == 'admin.peliculas' %}active{% endif %}">Peliculas</a>
+    <a href="{{ url_for('admin.funciones') }}" class="sidebar-link {% if request.endpoint == 'admin.funciones' %}active{% endif %}">Funciones</a>
+    <a href="{{ url_for('admin.usuarios') }}" class="sidebar-link {% if request.endpoint == 'admin.usuarios' %}active{% endif %}">Usuarios</a>
+    <a href="{{ url_for('tiquetes.validar_page') }}" class="sidebar-link">Validar QR</a>
+    <a href="{{ url_for('peliculas.cartelera') }}" class="sidebar-link">Ver sitio</a>
+    <a href="{{ url_for('auth.logout') }}" class="sidebar-link danger-link">Cerrar sesion</a>
+  </aside>
+
+  <div class="admin-main">
+    {% block admin_content %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

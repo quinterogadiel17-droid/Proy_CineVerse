@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070707" />
+      <stop offset="55%" stop-color="#2e1065" />
+      <stop offset="100%" stop-color="#ef4444" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <circle cx="428" cy="176" r="112" fill="#fde68a" fill-opacity="0.14" />
+  <path d="M206 530c18-176 56-268 112-268s94 92 112 268" fill="#090909" fill-opacity="0.86" />
+  <path d="M252 358h96M272 402h56" stroke="#fde68a" stroke-opacity="0.5" stroke-width="10" stroke-linecap="round" />
+  <rect x="42" y="628" width="516" height="164" rx="22" fill="#090909" fill-opacity="0.76" />
+  <text x="56" y="92" fill="#f5d0fe" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="56" y="708" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="78" font-weight="700">NOSFERATU</text>
+  <text x="56" y="778" fill="#fca5a5" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">NOCHES DE TERROR</text>
+</svg>

@@ -1,0 +1,348 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Gestion de Funciones{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header-row">
+  <div>
+    <span class="eyebrow">Programacion</span>
+    <h1 class="admin-title">Funciones</h1>
+  </div>
+  <button class="btn btn-primary" onclick="abrirModal()">Nueva funcion</button>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Pelicula</th>
+        <th>Ciudad</th>
+        <th>Sede</th>
+        <th>Fecha</th>
+        <th>Hora</th>
+        <th>Sala</th>
+        <th>Formato</th>
+        <th>Precio</th>
+        <th>Estado</th>
+        <th>Asientos ocupados</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in funciones %}
+        <tr>
+          <td>{{ f.titulo }}</td>
+          <td>{{ f.ciudad_nombre }}</td>
+          <td>{{ f.sede_nombre }}</td>
+          <td>{{ f.fecha }}</td>
+          <td>{{ f.hora }}</td>
+          <td>{{ f.sala }}</td>
+          <td>{{ f.formato }}</td>
+          <td>{{ f.precio|format_currency }}</td>
+          <td><span class="badge badge-{{ f.estado }}">{{ f.estado.upper() }}</span></td>
+          <td>
+            <span class="chip {% if f.asientos_ocupados %}active{% endif %}">
+              {{ f.asientos_ocupados }} reservados
+            </span>
+          </td>
+          <td>
+            <div class="inline-actions">
+              <button class="btn btn-secondary btn-sm" onclick="abrirLiberarAsientos({{ f.id }})" {% if not f.asientos_ocupados %}disabled{% endif %}>
+                Liberar asientos
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="cancelarFuncion({{ f.id }})">Cancelar</button>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="11" style="text-align:center; padding:2rem">No hay funciones registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal-overlay" id="modalFuncion">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal()">x</button>
+    <h2 class="modal-title">Nueva funcion</h2>
+
+    <div class="form-group">
+      <label class="form-label">Pelicula *</label>
+      <select class="form-input" id="fPelicula">
+        <option value="">Selecciona una pelicula...</option>
+        {% for p in peliculas %}
+          <option value="{{ p.id }}">{{ p.titulo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Sede *</label>
+        <select class="form-input" id="fSede">
+          <option value="">Selecciona una sede...</option>
+          {% for sede in sedes %}
+            <option value="{{ sede.id }}">{{ sede.ciudad_nombre }} · {{ sede.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sala *</label>
+        <input type="text" class="form-input" id="fSala" value="Sala 1">
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Fecha *</label>
+        <input type="date" class="form-input" id="fFecha">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hora *</label>
+        <input type="time" class="form-input" id="fHora">
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Formato *</label>
+        <select class="form-input" id="fFormato">
+          {% for formato in formatos %}
+            <option value="{{ formato }}">{{ formato }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Precio *</label>
+        <input type="number" class="form-input" id="fPrecio" min="1000" step="500" placeholder="18000">
+      </div>
+    </div>
+
+    <div id="errorFuncion" class="inline-error" style="display:none"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="guardarFuncion()">Crear funcion</button>
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalLiberarAsientos">
+  <div class="modal modal-wide">
+    <button class="modal-close" onclick="cerrarLiberarAsientos()">x</button>
+    <h2 class="modal-title">Liberar asientos reservados</h2>
+    <p id="seatReleaseSummary" class="section-description" style="margin-top:.5rem"></p>
+
+    <div id="seatReleaseMessage" class="inline-error" style="display:none; margin-top:1rem"></div>
+
+    <div class="bulk-bar" style="margin-top:1rem">
+      <label class="bulk-checkbox">
+        <input type="checkbox" id="selectAllOccupied" onchange="toggleAllOccupied(this.checked)">
+        Seleccionar todos
+      </label>
+      <span id="seatReleaseCount" class="chip">0 seleccionados</span>
+    </div>
+
+    <div class="admin-table-wrap seat-release-wrap" style="margin-top:1rem">
+      <table class="table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Asiento</th>
+            <th>Tiquete</th>
+            <th>Usuario</th>
+            <th>Correo</th>
+          </tr>
+        </thead>
+        <tbody id="occupiedSeatsBody">
+          <tr><td colspan="5" style="text-align:center; padding:2rem">Selecciona una funcion para ver reservas activas.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="confirmReleaseBtn" onclick="confirmarLiberacion()">Liberar seleccionados</button>
+      <button class="btn btn-secondary" onclick="cerrarLiberarAsientos()">Cerrar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.getElementById('fFecha').min = new Date().toISOString().split('T')[0];
+
+let funcionLiberacionId = null;
+
+function abrirModal() {
+  document.getElementById('errorFuncion').style.display = 'none';
+  document.getElementById('fPelicula').value = '';
+  document.getElementById('fSede').value = '';
+  document.getElementById('fSala').value = 'Sala 1';
+  document.getElementById('fFecha').value = '';
+  document.getElementById('fHora').value = '';
+  document.getElementById('fPrecio').value = '';
+  document.getElementById('modalFuncion').classList.add('open');
+}
+
+function cerrarModal() {
+  document.getElementById('modalFuncion').classList.remove('open');
+}
+
+async function guardarFuncion() {
+  const payload = {
+    pelicula_id: document.getElementById('fPelicula').value,
+    sede_id: document.getElementById('fSede').value,
+    sala: document.getElementById('fSala').value,
+    fecha: document.getElementById('fFecha').value,
+    hora: document.getElementById('fHora').value,
+    formato: document.getElementById('fFormato').value,
+    precio: parseFloat(document.getElementById('fPrecio').value)
+  };
+
+  if (!payload.pelicula_id || !payload.sede_id || !payload.sala || !payload.fecha || !payload.hora || !payload.precio) {
+    mostrarError('Completa todos los campos obligatorios.');
+    return;
+  }
+
+  const res = await fetch('/api/funciones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    cerrarModal();
+    location.reload();
+  } else {
+    const err = await res.json();
+    mostrarError(err.error + (err.detalle ? ': ' + err.detalle : ''));
+  }
+}
+
+async function cancelarFuncion(id) {
+  if (!confirm('Cancelar esta funcion?')) return;
+  const res = await fetch(`/api/funciones/${id}`, { method: 'DELETE' });
+  if (res.ok) location.reload();
+}
+
+function mostrarError(message) {
+  const div = document.getElementById('errorFuncion');
+  div.textContent = message;
+  div.style.display = 'block';
+}
+
+function selectedSeatIds() {
+  return Array.from(document.querySelectorAll('.occupied-seat-check:checked')).map(input => Number(input.value));
+}
+
+function updateSeatSelectionCount() {
+  const selected = selectedSeatIds().length;
+  document.getElementById('seatReleaseCount').textContent = `${selected} seleccionados`;
+}
+
+function toggleAllOccupied(checked) {
+  document.querySelectorAll('.occupied-seat-check').forEach(input => {
+    input.checked = checked;
+  });
+  updateSeatSelectionCount();
+}
+
+function mostrarMensajeLiberacion(message, isError = true) {
+  const box = document.getElementById('seatReleaseMessage');
+  box.className = `${isError ? 'inline-error' : 'inline-success'} seat-release-message`;
+  box.textContent = message;
+  box.style.display = 'block';
+}
+
+function cerrarLiberarAsientos() {
+  document.getElementById('modalLiberarAsientos').classList.remove('open');
+  document.getElementById('seatReleaseMessage').style.display = 'none';
+  document.getElementById('seatReleaseSummary').textContent = '';
+  document.getElementById('occupiedSeatsBody').innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem">Selecciona una funcion para ver reservas activas.</td></tr>';
+  document.getElementById('selectAllOccupied').checked = false;
+  document.getElementById('confirmReleaseBtn').disabled = false;
+  document.getElementById('confirmReleaseBtn').textContent = 'Liberar seleccionados';
+  updateSeatSelectionCount();
+}
+
+async function abrirLiberarAsientos(functionId) {
+  funcionLiberacionId = functionId;
+  document.getElementById('seatReleaseMessage').style.display = 'none';
+  document.getElementById('confirmReleaseBtn').textContent = 'Liberar seleccionados';
+  document.getElementById('confirmReleaseBtn').disabled = true;
+  document.getElementById('occupiedSeatsBody').innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem">Cargando reservas activas...</td></tr>';
+  document.getElementById('selectAllOccupied').checked = false;
+  updateSeatSelectionCount();
+  document.getElementById('modalLiberarAsientos').classList.add('open');
+
+  const res = await fetch(`/admin/api/funciones/${functionId}/asientos-ocupados`);
+  const data = await res.json();
+
+  if (!res.ok) {
+    mostrarMensajeLiberacion(data.error || 'No se pudo cargar la ocupacion actual.');
+    return;
+  }
+
+  document.getElementById('seatReleaseSummary').textContent =
+    `${data.funcion.titulo} · ${data.funcion.ciudad_nombre} · ${data.funcion.sede_nombre} · ${data.funcion.fecha} · ${data.funcion.hora}`;
+
+  const body = document.getElementById('occupiedSeatsBody');
+  if (!data.asientos.length) {
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem">No hay asientos ocupados para liberar en esta funcion.</td></tr>';
+    document.getElementById('confirmReleaseBtn').disabled = true;
+    return;
+  }
+
+  document.getElementById('confirmReleaseBtn').disabled = false;
+  body.innerHTML = data.asientos.map(seat => `
+    <tr>
+      <td><input type="checkbox" class="occupied-seat-check" value="${seat.asiento_id}" onchange="updateSeatSelectionCount()"></td>
+      <td><strong>${seat.label}</strong></td>
+      <td>${seat.ticket_code}</td>
+      <td>${seat.usuario_nombre}</td>
+      <td>${seat.usuario_email}</td>
+    </tr>
+  `).join('');
+}
+
+async function confirmarLiberacion() {
+  const seatIds = selectedSeatIds();
+  if (!seatIds.length) {
+    mostrarMensajeLiberacion('Selecciona al menos un asiento ocupado antes de liberar.');
+    return;
+  }
+
+  if (!confirm(`Liberar ${seatIds.length} asiento(s) removera la asignacion actual del usuario. ¿Deseas continuar?`)) {
+    return;
+  }
+
+  const button = document.getElementById('confirmReleaseBtn');
+  button.disabled = true;
+  button.textContent = 'Liberando...';
+
+  try {
+    const res = await fetch(`/admin/api/funciones/${funcionLiberacionId}/liberar-asientos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seat_ids: seatIds })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensajeLiberacion(data.error || 'No se pudieron liberar los asientos.');
+      button.disabled = false;
+      button.textContent = 'Liberar seleccionados';
+      return;
+    }
+
+    mostrarMensajeLiberacion(data.mensaje, false);
+    setTimeout(() => location.reload(), 900);
+  } catch (error) {
+    mostrarMensajeLiberacion('Ocurrio un error de conexion al intentar liberar los asientos.');
+    button.disabled = false;
+    button.textContent = 'Liberar seleccionados';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ app_name }}{% endblock %} | {{ app_name }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="site-backdrop"></div>
+
+  <header class="site-header">
+    <div class="utility-bar">
+      <p class="utility-copy">{{ app_tagline }}</p>
+
+      <form class="location-form" method="post" action="{{ url_for('update_location') }}">
+        <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
+        
+        <label class="utility-label" for="headerCity">Ciudad</label>
+        <div class="select-wrapper utility-select-wrapper">
+          <select id="headerCity" name="city_id" class="utility-select js-city-select" data-sede-target="headerSede">
+            {% for city in city_options %}
+              <option value="{{ city.id }}" {% if selected_city and selected_city.id == city.id %}selected{% endif %}>{{ city.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <label class="utility-label" for="headerSede">Sede</label>
+        <div class="select-wrapper utility-select-wrapper">
+          <select id="headerSede" name="sede_id" class="utility-select">
+            <option value="">Todas las sedes</option>
+            {% for sede in header_sedes %}
+              <option value="{{ sede.id }}" {% if selected_sede and selected_sede.id == sede.id %}selected{% endif %}>{{ sede.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" type="submit">Aplicar</button>
+      </form>
+    </div>
+
+    <nav class="navbar">
+      <a href="{{ url_for('peliculas.cartelera') }}" class="nav-brand">
+        <span class="nav-brand-mark"></span>
+        <span>
+          <strong>{{ app_name }}</strong>
+          <small>Experiencia de cine y reservas</small>
+        </span>
+      </a>
+
+      <div class="nav-links">
+        <a href="{{ url_for('peliculas.cartelera') }}" class="nav-link {% if request.endpoint == 'peliculas.cartelera' %}active{% endif %}">Cartelera</a>
+        <a href="{{ url_for('tiquetes.validar_page') }}" class="nav-link {% if request.endpoint == 'tiquetes.validar_page' %}active{% endif %}">Validar QR</a>
+        {% if session.get('user_rol') == 'admin' %}
+          <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}">Admin</a>
+        {% endif %}
+      </div>
+
+      <div class="nav-auth">
+        {% if session.get('user_id') %}
+          <div class="nav-user-card">
+            <span class="nav-user-eyebrow">Sesión activa</span>
+            <strong>{{ session.get('user_nombre') }}</strong>
+            {% if session.get('user_rol') == 'admin' %}
+              <span class="admin-badge">ADMIN</span>
+            {% endif %}
+          </div>
+          <a href="{{ url_for('auth.logout') }}" class="btn btn-secondary btn-sm">Salir</a>
+        {% else %}
+          <a href="{{ url_for('auth.login') }}" class="btn btn-secondary btn-sm">Ingresar</a>
+          <a href="{{ url_for('auth.registro') }}" class="btn btn-primary btn-sm">Crear cuenta</a>
+        {% endif %}
+      </div>
+    </nav>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main class="main-shell">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-brand">{{ app_name }}</div>
+        <p class="footer-copy">Operado sobre dominio institucional {{ institutional_domain }} con experiencia de compra, QR y reseñas.</p>
+      </div>
+      <div class="footer-meta">
+        <span>Ciudades y sedes integradas</span>
+        <span>Formatos {{ projection_formats|join(', ') }}</span>
+        <span>Pagos locales y envío de tiquetes por correo</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

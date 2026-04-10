@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block title %}{{ pelicula.titulo }}{% endblock %}
+
+{% block content %}
+<section class="detail-hero">
+  <div class="detail-backdrop" style="background-image:url('{{ pelicula.imagen_url }}')"></div>
+  <div class="detail-shell">
+    <div class="detail-poster-wrap">
+      <img src="{{ pelicula.imagen_url }}" alt="{{ pelicula.titulo }}" class="detail-poster">
+    </div>
+
+    <div class="detail-content">
+      <a href="{{ url_for('peliculas.cartelera') }}" class="back-link">Volver a cartelera</a>
+      <div class="detail-kicker">
+        <span class="chip active">{{ pelicula.categoria }}</span>
+        {% if pelicula.clasificacion %}<span class="chip">{{ pelicula.clasificacion }}</span>{% endif %}
+        {% if selected_city %}<span class="chip">{{ selected_city.nombre }}</span>{% endif %}
+      </div>
+      <h1 class="detail-title">{{ pelicula.titulo }}</h1>
+      <p class="detail-description">{{ pelicula.descripcion or 'Sin descripcion disponible.' }}</p>
+
+      <div class="detail-meta-grid">
+        <div class="detail-meta-card">
+          <span>Genero</span>
+          <strong>{{ pelicula.genero or 'Cartelera' }}</strong>
+        </div>
+        <div class="detail-meta-card">
+          <span>Duracion</span>
+          <strong>{{ pelicula.duracion }} min</strong>
+        </div>
+        <div class="detail-meta-card">
+          <span>Promedio</span>
+          <strong>{{ rating.promedio or 0 }} / 10</strong>
+        </div>
+      </div>
+
+      {% if available_formats %}
+        <div class="detail-filters">
+          <span class="eyebrow">Formatos disponibles</span>
+          <div class="chip-row">
+            <a href="{{ url_for('peliculas.detalle', id=pelicula.id, formato='Todos') }}" class="chip {% if selected_format == 'Todos' %}active{% endif %}">Todos</a>
+            {% for format_option in available_formats %}
+              <a href="{{ url_for('peliculas.detalle', id=pelicula.id, formato=format_option) }}" class="chip {% if selected_format == format_option %}active{% endif %}">{{ format_option }}</a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if available_sedes %}
+        <div class="detail-filters">
+          <span class="eyebrow">Sedes en tu ciudad</span>
+          <div class="chip-row">
+            {% for sede in available_sedes %}
+              <span class="chip {% if selected_sede and selected_sede.id == sede.id %}active{% endif %}">{{ sede.nombre }} <span>{{ sede.total_funciones }}</span></span>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Funciones disponibles</span>
+      <h2 class="section-title">Horarios y asientos</h2>
+    </div>
+    <p class="section-description">Cada funcion muestra sede, formato y disponibilidad restante de sillas.</p>
+  </div>
+
+  {% if funciones %}
+    <div class="function-grid">
+      {% for funcion in funciones %}
+        <article class="function-card {% if funcion.asientos_disponibles <= 0 %}disabled-card{% endif %}" {% if funcion.asientos_disponibles > 0 %}onclick="location.href='{{ url_for('funciones.seleccionar_asientos', id=funcion.id) }}'"{% endif %}>
+          <div class="function-card-top">
+            <span class="function-time">{{ funcion.hora|format_time }}</span>
+            <span class="chip">{{ funcion.formato }}</span>
+          </div>
+          <h3>{{ funcion.fecha|format_date }}</h3>
+          <div class="function-meta">
+            <span>{{ funcion.sede_nombre }}</span>
+            <span>{{ funcion.sala }}</span>
+          </div>
+          <div class="function-meta">
+            <span>{{ funcion.asientos_disponibles }} asientos libres</span>
+            <span>{{ funcion.precio|format_currency }}</span>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <strong>No hay funciones disponibles con esta combinacion.</strong>
+      <p>Prueba otro formato, otra sede o cambia tu ubicacion.</p>
+    </div>
+  {% endif %}
+</section>
+
+<section class="section reviews-section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Resenas</span>
+      <h2 class="section-title">Opiniones de usuarios</h2>
+    </div>
+    <p class="section-description">{{ rating.total or 0 }} resenas registradas para esta pelicula.</p>
+  </div>
+
+  <div class="reviews-layout">
+    <div class="review-panel">
+      <h3>Tu calificacion</h3>
+      {% if session.get('user_id') and session.get('user_rol') == 'cliente' %}
+        <form method="post" action="{{ url_for('peliculas.guardar_resena', id=pelicula.id) }}">
+          <div class="form-group">
+            <label class="form-label">Puntuacion (1.0 a 10.0)</label>
+            <input type="number" class="form-input" name="puntuacion" step="0.1" min="1" max="10" value="{{ user_review.puntuacion if user_review else '' }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Comentario</label>
+            <textarea class="form-input" name="comentario" rows="4" placeholder="Comparte tu experiencia...">{{ user_review.comentario if user_review else '' }}</textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Guardar resena</button>
+        </form>
+      {% elif not session.get('user_id') %}
+        <p class="section-description">Inicia sesion para dejar una resena.</p>
+        <a href="{{ url_for('auth.login') }}" class="btn btn-secondary">Ingresar</a>
+      {% else %}
+        <p class="section-description">Solo los clientes pueden publicar resenas.</p>
+      {% endif %}
+    </div>
+
+    <div class="review-list">
+      {% if reviews %}
+        {% for review in reviews %}
+          <article class="review-card">
+            <div class="review-card-top">
+              <strong>{{ review.usuario_nombre }}</strong>
+              <span class="chip active">{{ review.puntuacion }} / 10</span>
+            </div>
+            <p>{{ review.comentario or 'Sin comentario adicional.' }}</p>
+            <span class="review-date">{{ review.fecha.strftime('%d/%m/%Y') if review.fecha else '' }}</span>
+          </article>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <strong>Aun no hay resenas.</strong>
+          <p>Se el primero en puntuar esta pelicula.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

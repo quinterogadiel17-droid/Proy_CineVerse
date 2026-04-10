@@ -1,0 +1,430 @@
+{% extends 'base.html' %}
+{% block title %}Reserva {{ funcion.titulo }}{% endblock %}
+
+{% block content %}
+<section class="section booking-shell">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Compra de tiquetes</span>
+      <h1 class="section-title">Asientos, pago y extras</h1>
+    </div>
+    <p class="section-description">Selecciona tu ubicacion final, añade snacks y valida el metodo de pago antes de confirmar.</p>
+  </div>
+
+  <div class="booking-layout">
+    <div class="booking-main">
+      <div class="booking-summary-bar">
+        <img src="{{ funcion.imagen_url }}" alt="{{ funcion.titulo }}" class="booking-poster">
+        <div>
+          <h2>{{ funcion.titulo }}</h2>
+          <p>{{ funcion.ciudad_nombre }} · {{ funcion.sede_nombre }}</p>
+          <span>{{ funcion.fecha|format_short_date }} · {{ funcion.hora|format_time }} · {{ funcion.formato }} · {{ funcion.sala }}</span>
+        </div>
+        <div class="booking-price">{{ funcion.precio|format_currency }} por boleta</div>
+      </div>
+
+      <div class="pantalla">Pantalla</div>
+
+      <div class="asientos-leyenda">
+        <div class="leyenda-item"><div class="leyenda-box disponible"></div> Disponible</div>
+        <div class="leyenda-item"><div class="leyenda-box seleccionado"></div> Seleccionado</div>
+        <div class="leyenda-item"><div class="leyenda-box ocupado"></div> Ocupado</div>
+      </div>
+
+      <div class="asientos-grid" id="asientosGrid">
+        <div class="grid-loading">Cargando asientos...</div>
+      </div>
+      <p class="seat-sync-status" id="seatSyncStatus">Los asientos se actualizan automaticamente cada 5 segundos.</p>
+    </div>
+
+    <aside class="booking-sidebar">
+      {% if not session.get('user_id') %}
+        <section class="checkout-card">
+          <h3>Necesitas iniciar sesion</h3>
+          <p class="section-description">La compra de tiquetes solo esta disponible para clientes autenticados.</p>
+          <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Iniciar sesion</a>
+        </section>
+      {% endif %}
+
+      <section class="snack-panel">
+        <div class="section-heading compact">
+          <div>
+            <span class="eyebrow">Extras de cine</span>
+            <h2 class="section-title">Combos y snacks</h2>
+          </div>
+        </div>
+
+        <div class="combo-list">
+          {% for combo in combos_catalogo %}
+            <article class="combo-card">
+              <div>
+                <span class="combo-tag">{{ combo.tag }}</span>
+                <h3>{{ combo.name }}</h3>
+                <p>{{ combo.description }}</p>
+                <strong>{{ combo.price|format_currency }}</strong>
+              </div>
+              <div class="combo-stepper">
+                <button type="button" onclick="actualizarCombo('{{ combo.id }}', -1)">-</button>
+                <span id="qty-{{ combo.id }}">0</span>
+                <button type="button" onclick="actualizarCombo('{{ combo.id }}', 1)">+</button>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="checkout-card">
+        <h3>Metodo de pago</h3>
+        <div class="form-group">
+          <label class="form-label">Selecciona un metodo</label>
+          <select id="paymentMethod" class="form-input" onchange="renderPaymentFields()">
+            <option value="tarjeta">Tarjeta debito / credito</option>
+            <option value="nequi">Nequi</option>
+            <option value="bancolombia">Bancolombia</option>
+            <option value="otro">Otro metodo local</option>
+          </select>
+        </div>
+        <div id="paymentFields"></div>
+      </section>
+
+      <section class="checkout-card">
+        <h3>Resumen de compra</h3>
+        <div class="checkout-line">
+          <span>Asientos seleccionados</span>
+          <strong id="countAsientos">0</strong>
+        </div>
+        <div class="checkout-list" id="listaAsientos">Aun no has elegido asientos.</div>
+
+        <div class="checkout-line">
+          <span>Subtotal boletas</span>
+          <strong id="subtotalBoletas">{{ 0|format_currency }}</strong>
+        </div>
+
+        <div class="checkout-line">
+          <span>Snacks</span>
+          <strong id="subtotalSnacks">{{ 0|format_currency }}</strong>
+        </div>
+        <div class="checkout-list" id="listaCombos">Sin combos agregados.</div>
+
+        <div class="checkout-total">
+          <span>Total</span>
+          <strong id="totalPrecio">{{ 0|format_currency }}</strong>
+        </div>
+
+        <button class="btn btn-primary checkout-button" id="btnComprar" onclick="confirmarCompra()" {% if not session.get('user_id') %}disabled{% endif %}>
+          Confirmar compra
+        </button>
+      </section>
+    </aside>
+  </div>
+</section>
+
+<div class="modal-overlay" id="modalCompra">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal()">x</button>
+    <h2 class="modal-title">Confirma tu compra</h2>
+    <div id="modalDetalle" class="modal-detail"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="confirmPayBtn" onclick="procesarCompra()">Pagar ahora</button>
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalResultado">
+  <div class="modal">
+    <div id="resultadoContent"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const FUNCION_ID = {{ funcion.id }};
+const PRECIO = Number({{ funcion.precio }});
+const COMBOS = {{ combos_catalogo|tojson }};
+const USER_CAN_PURCHASE = {{ 'true' if session.get('user_id') else 'false' }};
+
+let seleccionados = [];
+let combosSeleccionados = {};
+let seatRefreshTimer = null;
+
+function renderPaymentFields() {
+  const method = document.getElementById('paymentMethod').value;
+  const container = document.getElementById('paymentFields');
+
+  const templates = {
+    tarjeta: `
+      <div class="form-group"><label class="form-label">Titular</label><input id="holderName" class="form-input" placeholder="Nombre completo"></div>
+      <div class="form-group"><label class="form-label">Numero de tarjeta</label><input id="cardNumber" class="form-input" placeholder="4111 1111 1111 1111"></div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Mes</label><input id="expMonth" type="number" min="1" max="12" class="form-input" placeholder="12"></div>
+        <div class="form-group"><label class="form-label">Ano</label><input id="expYear" type="number" min="2026" max="2038" class="form-input" placeholder="2028"></div>
+      </div>
+      <div class="form-group"><label class="form-label">CVC</label><input id="cvc" class="form-input" placeholder="123"></div>
+    `,
+    nequi: `
+      <div class="form-group"><label class="form-label">Numero Nequi</label><input id="nequiPhone" class="form-input" placeholder="3001234567"></div>
+    `,
+    bancolombia: `
+      <div class="form-group"><label class="form-label">Titular</label><input id="bankOwner" class="form-input" placeholder="Nombre del titular"></div>
+      <div class="form-group"><label class="form-label">Tipo de cuenta</label><select id="accountType" class="form-input"><option value="ahorros">Ahorros</option><option value="corriente">Corriente</option></select></div>
+      <div class="form-group"><label class="form-label">Numero de cuenta</label><input id="accountNumber" class="form-input" placeholder="1234567890"></div>
+    `,
+    otro: `
+      <div class="form-group"><label class="form-label">Proveedor</label><input id="otherProvider" class="form-input" placeholder="Daviplata, PSE, efectivo..."></div>
+      <div class="form-group"><label class="form-label">Referencia</label><input id="otherReference" class="form-input" placeholder="Referencia del pago"></div>
+    `
+  };
+
+  container.innerHTML = templates[method];
+}
+
+function setSeatSyncStatus(message, variant = '') {
+  const status = document.getElementById('seatSyncStatus');
+  status.textContent = message;
+  status.className = `seat-sync-status${variant ? ` ${variant}` : ''}`;
+}
+
+function selectedSeatLabel(seat) {
+  return `Fila ${seat.fila}-${seat.col}`;
+}
+
+async function cargarAsientos(silent = false) {
+  try {
+    const res = await fetch(`/api/funciones/${FUNCION_ID}/asientos`);
+    const asientos = await res.json();
+    renderAsientos(asientos);
+    if (!silent) {
+      setSeatSyncStatus(`Mapa actualizado ${new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}.`);
+    }
+  } catch (error) {
+    if (!silent) {
+      setSeatSyncStatus('No se pudo actualizar el mapa de asientos en este momento.', 'warning');
+    }
+  }
+}
+
+function renderAsientos(asientos) {
+  const grid = document.getElementById('asientosGrid');
+  const availableIds = new Set(
+    asientos.filter(asiento => asiento.estado_funcion !== 'ocupado').map(asiento => asiento.id)
+  );
+  const removedSeats = seleccionados.filter(seat => !availableIds.has(seat.id));
+
+  if (removedSeats.length) {
+    seleccionados = seleccionados.filter(seat => availableIds.has(seat.id));
+    setSeatSyncStatus(
+      `Se actualizo la disponibilidad. ${removedSeats.map(selectedSeatLabel).join(', ')} ya no esta disponible.`,
+      'warning'
+    );
+  }
+
+  let html = '';
+
+  asientos.forEach(asiento => {
+    const ocupado = asiento.estado_funcion === 'ocupado';
+    const seleccionado = !ocupado && seleccionados.some(item => item.id === asiento.id);
+    html += `
+      <button
+        class="asiento ${ocupado ? 'ocupado' : seleccionado ? 'seleccionado' : 'disponible'}"
+        data-id="${asiento.id}"
+        title="Fila ${asiento.fila} - Silla ${asiento.columna}"
+        ${ocupado ? 'disabled' : `onclick="toggleAsiento(this, ${asiento.id}, '${asiento.fila}', ${asiento.columna})"`}
+      >${asiento.fila}${asiento.columna}</button>
+    `;
+  });
+
+  grid.innerHTML = html;
+  actualizarResumen();
+}
+
+function toggleAsiento(btn, id, fila, col) {
+  const index = seleccionados.findIndex(item => item.id === id);
+  if (index === -1) {
+    seleccionados.push({ id, fila, col });
+    btn.classList.remove('disponible');
+    btn.classList.add('seleccionado');
+  } else {
+    seleccionados.splice(index, 1);
+    btn.classList.remove('seleccionado');
+    btn.classList.add('disponible');
+  }
+  actualizarResumen();
+}
+
+function actualizarCombo(comboId, delta) {
+  const current = combosSeleccionados[comboId] || 0;
+  const next = Math.max(0, current + delta);
+  combosSeleccionados[comboId] = next;
+  document.getElementById(`qty-${comboId}`).textContent = next;
+  actualizarResumen();
+}
+
+function combosActivos() {
+  return COMBOS.filter(combo => (combosSeleccionados[combo.id] || 0) > 0).map(combo => ({
+    id: combo.id,
+    name: combo.name,
+    qty: combosSeleccionados[combo.id],
+    price: combo.price,
+    total: combo.price * combosSeleccionados[combo.id]
+  }));
+}
+
+function paymentPayload() {
+  const method = document.getElementById('paymentMethod').value;
+  if (method === 'tarjeta') {
+    return {
+      method,
+      holder_name: document.getElementById('holderName')?.value || '',
+      card_number: document.getElementById('cardNumber')?.value || '',
+      exp_month: document.getElementById('expMonth')?.value || '',
+      exp_year: document.getElementById('expYear')?.value || '',
+      cvc: document.getElementById('cvc')?.value || ''
+    };
+  }
+  if (method === 'nequi') {
+    return { method, phone: document.getElementById('nequiPhone')?.value || '' };
+  }
+  if (method === 'bancolombia') {
+    return {
+      method,
+      owner_name: document.getElementById('bankOwner')?.value || '',
+      account_type: document.getElementById('accountType')?.value || '',
+      account_number: document.getElementById('accountNumber')?.value || ''
+    };
+  }
+  return {
+    method,
+    provider: document.getElementById('otherProvider')?.value || '',
+    reference: document.getElementById('otherReference')?.value || ''
+  };
+}
+
+function actualizarResumen() {
+  const seatSubtotal = seleccionados.length * PRECIO;
+  const combos = combosActivos();
+  const snackSubtotal = combos.reduce((sum, combo) => sum + combo.total, 0);
+  const total = seatSubtotal + snackSubtotal;
+
+  document.getElementById('countAsientos').textContent = seleccionados.length;
+  document.getElementById('listaAsientos').textContent = seleccionados.length
+    ? seleccionados.map(seat => `Fila ${seat.fila}-${seat.col}`).join(', ')
+    : 'Aun no has elegido asientos.';
+  document.getElementById('listaCombos').textContent = combos.length
+    ? combos.map(combo => `${combo.name} x${combo.qty}`).join(', ')
+    : 'Sin combos agregados.';
+
+  document.getElementById('subtotalBoletas').textContent = formatCurrency(seatSubtotal);
+  document.getElementById('subtotalSnacks').textContent = formatCurrency(snackSubtotal);
+  document.getElementById('totalPrecio').textContent = formatCurrency(total);
+  document.getElementById('btnComprar').disabled = !USER_CAN_PURCHASE || seleccionados.length === 0;
+}
+
+function confirmarCompra() {
+  if (!USER_CAN_PURCHASE || !seleccionados.length) return;
+
+  const combos = combosActivos();
+  const total = seleccionados.length * PRECIO + combos.reduce((sum, combo) => sum + combo.total, 0);
+
+  document.getElementById('modalDetalle').innerHTML = `
+    <p><strong>Pelicula:</strong> {{ funcion.titulo }}</p>
+    <p><strong>Funcion:</strong> {{ funcion.fecha|format_short_date }} · {{ funcion.hora|format_time }} · {{ funcion.formato }}</p>
+    <p><strong>Ubicacion:</strong> {{ funcion.ciudad_nombre }} · {{ funcion.sede_nombre }} · {{ funcion.sala }}</p>
+    <p><strong>Asientos:</strong> ${seleccionados.map(seat => `Fila ${seat.fila}-${seat.col}`).join(', ')}</p>
+    <p><strong>Pago:</strong> ${document.getElementById('paymentMethod').selectedOptions[0].textContent}</p>
+    <p><strong>Snacks:</strong> ${combos.length ? combos.map(combo => `${combo.name} x${combo.qty}`).join(', ') : 'Sin adicionales'}</p>
+    <p class="modal-total">Total a pagar: ${formatCurrency(total)}</p>
+  `;
+  document.getElementById('modalCompra').classList.add('open');
+}
+
+function cerrarModal() {
+  document.getElementById('modalCompra').classList.remove('open');
+}
+
+async function procesarCompra() {
+  const btn = document.getElementById('confirmPayBtn');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+
+  try {
+    const res = await fetch('/api/tiquetes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        funcion_id: FUNCION_ID,
+        asientos_ids: seleccionados.map(seat => seat.id),
+        combos: combosActivos().map(combo => ({ id: combo.id, qty: combo.qty })),
+        payment: paymentPayload()
+      })
+    });
+    const data = await res.json();
+
+    document.getElementById('modalCompra').classList.remove('open');
+    document.getElementById('modalResultado').classList.add('open');
+
+    if (res.ok) {
+      document.getElementById('resultadoContent').innerHTML = `
+        <div class="result-state result-success">
+          <span class="result-kicker">Compra confirmada</span>
+          <h2>Tu reserva esta lista</h2>
+          <p>Total pagado: ${formatCurrency(data.total)}</p>
+          <p>Metodo: ${data.metodo_pago}</p>
+          <p>${data.email_sent ? 'El tiquete fue enviado a tu correo.' : 'No se pudo enviar el correo en este entorno.'}</p>
+          <img src="data:image/png;base64,${data.qr}" alt="QR de compra" class="result-qr">
+          <p class="result-code">${data.codigo}</p>
+          <a href="/tiquete/${data.codigo}" class="btn btn-primary">Ver tiquete</a>
+        </div>
+      `;
+    } else {
+      document.getElementById('resultadoContent').innerHTML = `
+        <div class="result-state result-error">
+          <span class="result-kicker">No pudimos completar la compra</span>
+          <h2>Revisa tus datos</h2>
+          <p>${data.error || 'Ocurrio un error inesperado.'}</p>
+          <button class="btn btn-secondary" onclick="document.getElementById('modalResultado').classList.remove('open')">Cerrar</button>
+        </div>
+      `;
+    }
+  } catch (error) {
+    document.getElementById('modalCompra').classList.remove('open');
+    document.getElementById('modalResultado').classList.add('open');
+    document.getElementById('resultadoContent').innerHTML = `
+      <div class="result-state result-error">
+        <span class="result-kicker">Error de conexion</span>
+        <h2>No se pudo finalizar la compra</h2>
+        <p>Intenta nuevamente en unos segundos.</p>
+        <button class="btn btn-secondary" onclick="document.getElementById('modalResultado').classList.remove('open')">Cerrar</button>
+      </div>
+    `;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Pagar ahora';
+  }
+}
+
+function formatCurrency(value) {
+  return '$' + new Intl.NumberFormat('es-CO').format(value);
+}
+
+renderPaymentFields();
+cargarAsientos();
+actualizarResumen();
+seatRefreshTimer = setInterval(() => {
+  if (!document.hidden) {
+    cargarAsientos(true);
+  }
+}, 5000);
+
+window.addEventListener('beforeunload', () => {
+  if (seatRefreshTimer) clearInterval(seatRefreshTimer);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    cargarAsientos(true);
+  }
+});
+</script>
+{% endblock %}

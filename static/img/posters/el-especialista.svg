@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#180712" />
+      <stop offset="60%" stop-color="#8b1e3f" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <polygon points="468,122 522,260 378,208" fill="#fdba74" fill-opacity="0.64" />
+  <rect x="76" y="570" width="448" height="180" rx="20" fill="#18050f" fill-opacity="0.72" />
+  <text x="62" y="92" fill="#ffe4e6" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="62" y="654" fill="#fff7ed" font-family="Space Grotesk, Arial, sans-serif" font-size="54" font-weight="700">EL</text>
+  <text x="62" y="716" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="74" font-weight="700">ESPECIALISTA</text>
+  <text x="62" y="790" fill="#fdba74" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">ACCION VIP</text>
+</svg>

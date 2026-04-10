@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#04131d" />
+      <stop offset="55%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#67e8f9" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <rect x="212" y="178" width="176" height="212" rx="84" fill="#d5fbff" fill-opacity="0.28" />
+  <circle cx="258" cy="266" r="18" fill="#ecfeff" />
+  <circle cx="342" cy="266" r="18" fill="#ecfeff" />
+  <path d="M214 486c54-28 112-42 174-42s118 14 172 42v250H40V540c40-26 98-54 174-54" fill="#06232a" fill-opacity="0.74" />
+  <text x="54" y="92" fill="#dafeff" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="54" y="664" fill="#ecfeff" font-family="Space Grotesk, Arial, sans-serif" font-size="64" font-weight="700">ROBOT</text>
+  <text x="54" y="734" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="64" font-weight="700">SALVAJE</text>
+  <text x="54" y="806" fill="#a5f3fc" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">AVENTURA DE ESTRENO</text>
+</svg>

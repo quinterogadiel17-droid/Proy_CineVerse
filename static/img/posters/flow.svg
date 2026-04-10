@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c1726" />
+      <stop offset="55%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#93c5fd" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <path d="M0 620c82-34 170-52 264-52 118 0 230 28 336 70v262H0Z" fill="#08223d" fill-opacity="0.72" />
+  <path d="M0 684c86-28 170-40 256-40 138 0 254 34 344 76" fill="none" stroke="#dbeafe" stroke-width="12" stroke-linecap="round" stroke-opacity="0.35" />
+  <text x="54" y="92" fill="#e0f2fe" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="54" y="698" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="104" font-weight="700">FLOW</text>
+  <text x="54" y="776" fill="#dbeafe" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">SELECCION FESTIVAL</text>
+</svg>

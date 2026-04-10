@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Verificacion de cuenta{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <span class="eyebrow">Estado de tu cuenta</span>
+    <h1 class="auth-title">{{ title }}</h1>
+    <p class="auth-sub">{{ message }}</p>
+
+    {% if confirmation_url %}
+      <div class="inline-error" style="margin-bottom:1rem">
+        {% if error_detail %}<div style="margin-bottom:.4rem">{{ error_detail }}</div>{% endif %}
+        Enlace temporal de desarrollo:
+        <a href="{{ confirmation_url }}">{{ confirmation_url }}</a>
+      </div>
+    {% endif %}
+
+    <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Ir a iniciar sesion</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Dashboard Admin{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header-row">
+  <div>
+    <span class="eyebrow">Resumen operativo</span>
+    <h1 class="admin-title">Dashboard</h1>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-valor">{{ total_tiquetes }}</div>
+    <div class="stat-label">Tiquetes vendidos</div>
+  </div>
+  <div class="stat-card oro">
+    <div class="stat-valor">{{ ingresos|format_currency }}</div>
+    <div class="stat-label">Ingresos totales</div>
+  </div>
+  <div class="stat-card verde">
+    <div class="stat-valor">{{ total_peliculas }}</div>
+    <div class="stat-label">Peliculas activas</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-valor">{{ total_funciones }}</div>
+    <div class="stat-label">Funciones proximas</div>
+  </div>
+</div>
+
+<div class="admin-dashboard-grid">
+  <div class="admin-table-wrap" style="padding:1.5rem">
+    <div class="admin-table-title" style="margin-bottom:1.2rem">Ventas ultimos 7 dias</div>
+    <canvas id="chartVentas" height="200"></canvas>
+    {% if not ventas_dia %}
+      <div style="text-align:center; padding:2rem">Sin ventas registradas aun.</div>
+    {% endif %}
+  </div>
+
+  <div class="admin-table-wrap" style="padding:1.5rem">
+    <div class="admin-table-title" style="margin-bottom:1.2rem">Peliculas mas vistas</div>
+    {% if top_peliculas %}
+      {% for p in top_peliculas %}
+        <div class="rank-row">
+          <div class="rank-index">{{ loop.index }}</div>
+          <div class="rank-copy">
+            <strong>{{ p.titulo }}</strong>
+            <span>{{ p.total_asientos }} asientos vendidos</span>
+          </div>
+          <strong>{{ p.total_asientos }}</strong>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align:center; padding:2rem">Sin datos aun.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header">
+    <span class="admin-table-title">Ocupacion de salas hoy</span>
+  </div>
+  {% if ocupacion %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Pelicula</th>
+          <th>Ciudad</th>
+          <th>Sede</th>
+          <th>Sala</th>
+          <th>Hora</th>
+          <th>Formato</th>
+          <th>Ocupados</th>
+          <th>Disponibles</th>
+          <th>Ocupacion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in ocupacion %}
+          <tr>
+            <td>{{ o.titulo }}</td>
+            <td>{{ o.ciudad_nombre }}</td>
+            <td>{{ o.sede_nombre }}</td>
+            <td>{{ o.sala }}</td>
+            <td>{{ o.hora }}</td>
+            <td>{{ o.formato }}</td>
+            <td>{{ o.ocupados }}</td>
+            <td>{{ o.disponibles }}</td>
+            <td>
+              {% set pct = (o.ocupados / 150 * 100)|int %}
+              <div class="occupancy-row">
+                <div class="occupancy-bar">
+                  <div class="occupancy-bar-fill" style="width:{{ pct }}%"></div>
+                </div>
+                <span>{{ pct }}%</span>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="text-align:center; padding:2rem">No hay funciones programadas para hoy.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+const ventasData = {{ ventas_dia | tojson }};
+
+if (ventasData.length > 0) {
+  const ctx = document.getElementById('chartVentas').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ventasData.map(item => item.dia),
+      datasets: [{
+        label: 'Ingresos',
+        data: ventasData.map(item => item.total_dia),
+        backgroundColor: 'rgba(255, 107, 44, 0.45)',
+        borderColor: '#ff6b2c',
+        borderWidth: 2,
+        borderRadius: 12
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '$' + new Intl.NumberFormat('es-CO').format(ctx.raw)
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#94a3b8' },
+          grid: { color: 'rgba(148, 163, 184, 0.08)' }
+        },
+        y: {
+          ticks: {
+            color: '#94a3b8',
+            callback: value => '$' + new Intl.NumberFormat('es-CO').format(value)
+          },
+          grid: { color: 'rgba(148, 163, 184, 0.08)' }
+        }
+      }
+    }
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050816" />
+      <stop offset="55%" stop-color="#4338ca" />
+      <stop offset="100%" stop-color="#f43f5e" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <g fill="#c7d2fe" fill-opacity="0.18">
+    <circle cx="112" cy="156" r="10" />
+    <circle cx="182" cy="96" r="7" />
+    <circle cx="268" cy="164" r="6" />
+    <circle cx="416" cy="116" r="8" />
+    <circle cx="498" cy="194" r="12" />
+  </g>
+  <rect x="80" y="580" width="438" height="176" rx="26" fill="#090c22" fill-opacity="0.76" />
+  <text x="58" y="92" fill="#e0e7ff" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="58" y="668" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="76" font-weight="700">MICKEY</text>
+  <text x="58" y="750" fill="#fb7185" font-family="Space Grotesk, Arial, sans-serif" font-size="110" font-weight="700">17</text>
+  <text x="58" y="812" fill="#fbcfe8" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">THRILLER DEL FUTURO</text>
+</svg>

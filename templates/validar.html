@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% block title %}Validar Tiquete{% endblock %}
+
+{% block content %}
+<section class="section validation-shell">
+  <div class="validation-card">
+    <span class="eyebrow">Control de acceso</span>
+    <h1 class="section-title">Valida un tiquete o escanea QR</h1>
+    <p class="section-description">Puedes escribir el codigo manualmente o usar la camara del navegador para validar asistencia.</p>
+
+    <input
+      type="text"
+      class="input-codigo"
+      id="inputCodigo"
+      placeholder="TK-XXXXXXXXXXXX"
+      oninput="this.value = this.value.toUpperCase()"
+      onkeydown="if(event.key==='Enter') validar()"
+    >
+
+    <div class="hero-actions" style="justify-content:center">
+      <button class="btn btn-primary validation-button" onclick="validar()">Validar codigo</button>
+      <button class="btn btn-secondary" id="scannerButton" onclick="iniciarEscaner()">Escanear QR</button>
+    </div>
+
+    <video id="scannerPreview" class="scanner-preview" autoplay playsinline muted style="display:none"></video>
+    <div id="resultado" style="display:none"></div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let scannerStream = null;
+let scannerInterval = null;
+
+async function validar(codigoManual = null) {
+  const codigo = (codigoManual || document.getElementById('inputCodigo').value).trim();
+  if (!codigo) return;
+
+  const div = document.getElementById('resultado');
+  div.style.display = 'block';
+  div.innerHTML = '<div class="validation-loading">Validando acceso...</div>';
+
+  const res = await fetch('/api/tiquetes/validar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ codigo })
+  });
+  const data = await res.json();
+
+  if (data.valido) {
+    div.innerHTML = `
+      <div class="resultado-valido">
+        <div class="resultado-icon">OK</div>
+        <strong>${data.mensaje}</strong>
+        <p>${data.pelicula} · ${data.sede} · ${data.ciudad}</p>
+      </div>
+    `;
+  } else {
+    div.innerHTML = `
+      <div class="resultado-invalido">
+        <div class="resultado-icon">X</div>
+        <strong>${data.mensaje}</strong>
+      </div>
+    `;
+  }
+}
+
+async function iniciarEscaner() {
+  const video = document.getElementById('scannerPreview');
+  const resultado = document.getElementById('resultado');
+
+  if (!('BarcodeDetector' in window)) {
+    resultado.style.display = 'block';
+    resultado.innerHTML = '<div class="resultado-invalido"><strong>Tu navegador no soporta escaneo QR nativo. Usa el codigo manual.</strong></div>';
+    return;
+  }
+
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = scannerStream;
+    video.style.display = 'block';
+    document.getElementById('scannerButton').disabled = true;
+
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    scannerInterval = setInterval(async () => {
+      try {
+        const barcodes = await detector.detect(video);
+        if (barcodes.length) {
+          detenerEscaner();
+          document.getElementById('inputCodigo').value = barcodes[0].rawValue;
+          validar(barcodes[0].rawValue);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }, 900);
+  } catch (error) {
+    resultado.style.display = 'block';
+    resultado.innerHTML = '<div class="resultado-invalido"><strong>No se pudo acceder a la camara.</strong></div>';
+  }
+}
+
+function detenerEscaner() {
+  if (scannerInterval) {
+    clearInterval(scannerInterval);
+    scannerInterval = null;
+  }
+  if (scannerStream) {
+    scannerStream.getTracks().forEach(track => track.stop());
+    scannerStream = null;
+  }
+  document.getElementById('scannerPreview').style.display = 'none';
+  document.getElementById('scannerButton').disabled = false;
+}
+
+window.addEventListener('beforeunload', detenerEscaner);
+</script>
+{% endblock %}

@@ -1,0 +1,285 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Gestion de Peliculas{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header-row">
+  <div>
+    <span class="eyebrow">Catalogo</span>
+    <h1 class="admin-title">Peliculas</h1>
+  </div>
+  <button class="btn btn-primary" onclick="abrirModal()">Nueva pelicula</button>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Poster</th>
+        <th>Titulo</th>
+        <th>Categoria</th>
+        <th>Genero</th>
+        <th>Duracion</th>
+        <th>Clasificacion</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in peliculas %}
+        <tr id="row-{{ p.id }}">
+          <td><img src="{{ p.imagen_url }}" alt="{{ p.titulo }}" class="admin-thumb"></td>
+          <td>
+            <div style="font-weight:600">{{ p.titulo }}</div>
+            <div class="muted-copy">{{ p.descripcion or '-' }}</div>
+          </td>
+          <td>{{ p.categoria or 'Cartelera' }}</td>
+          <td>{{ p.genero or '-' }}</td>
+          <td>{{ p.duracion }} min</td>
+          <td>{{ p.clasificacion or '-' }}</td>
+          <td><span class="badge badge-{{ p.estado }}">{{ p.estado.upper() }}</span></td>
+          <td>
+            <div class="inline-actions">
+              <button class="btn btn-secondary btn-sm" onclick='editarPelicula({{ p | tojson }})'>Editar</button>
+              <button class="btn btn-danger btn-sm" onclick='eliminarPelicula({{ p.id }}, {{ p.titulo|tojson }})'>Eliminar</button>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" style="text-align:center; padding:2rem">No hay peliculas registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="modal-overlay" id="modalPelicula">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal()">x</button>
+    <h2 class="modal-title" id="modalTitulo">Nueva pelicula</h2>
+
+    <input type="hidden" id="peliculaId">
+
+    <div class="form-group">
+      <label class="form-label">Titulo *</label>
+      <input type="text" class="form-input" id="fTitulo" placeholder="Nombre de la pelicula">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Descripcion</label>
+      <textarea class="form-input" id="fDesc" rows="3" placeholder="Sinopsis..."></textarea>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Duracion *</label>
+        <input type="number" class="form-input" id="fDuracion" placeholder="120">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Genero</label>
+        <input type="text" class="form-input" id="fGenero" placeholder="Accion, terror, comedia...">
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Categoria</label>
+        <select class="form-input" id="fCategoria">
+          <option value="Estreno">Estreno</option>
+          <option value="Tendencias">Tendencias</option>
+          <option value="Accion">Accion</option>
+          <option value="Familia">Familia</option>
+          <option value="Festival">Festival</option>
+          <option value="Noches de terror">Noches de terror</option>
+          <option value="Cartelera">Cartelera</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Clasificacion</label>
+        <select class="form-input" id="fClasificacion">
+          <option value="">Todas las edades</option>
+          <option value="+7">+7</option>
+          <option value="+13">+13</option>
+          <option value="+16">+16</option>
+          <option value="+18">+18</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Estado</label>
+        <select class="form-input" id="fEstado">
+          <option value="activa">Activa</option>
+          <option value="inactiva">Inactiva</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Trailer</label>
+        <input type="url" class="form-input" id="fTrailer" placeholder="https://youtube.com/...">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Poster</label>
+      <input type="hidden" id="fImagen">
+      <div class="upload-dropzone" id="uploadDropzone">
+        <strong>Arrastra una imagen aqui</strong>
+        <span>o selecciona un archivo para subirlo al sistema.</span>
+        <input type="file" id="posterFile" accept=".png,.jpg,.jpeg,.webp,.svg" hidden>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('posterFile').click()">Seleccionar archivo</button>
+      </div>
+    </div>
+
+    <div id="previewPoster" style="display:none; margin-bottom:1rem">
+      <img id="posterImg" class="admin-thumb" style="width:90px; height:130px">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="guardarPelicula()">Guardar</button>
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalEliminar">
+  <div class="modal">
+    <h2 class="modal-title">Eliminar pelicula</h2>
+    <p id="nombreEliminar" class="section-description" style="margin-bottom:1rem"></p>
+    <div class="modal-actions">
+      <button class="btn btn-danger" onclick="confirmarEliminar()">Si, eliminar</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('modalEliminar').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+let peliculaEliminarId = null;
+
+function abrirModal() {
+  document.getElementById('modalTitulo').textContent = 'Nueva pelicula';
+  document.getElementById('peliculaId').value = '';
+  ['fTitulo', 'fDesc', 'fDuracion', 'fGenero', 'fTrailer', 'fImagen'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fCategoria').value = 'Estreno';
+  document.getElementById('fClasificacion').value = '';
+  document.getElementById('fEstado').value = 'activa';
+  document.getElementById('previewPoster').style.display = 'none';
+  document.getElementById('modalPelicula').classList.add('open');
+}
+
+function cerrarModal() {
+  document.getElementById('modalPelicula').classList.remove('open');
+}
+
+function editarPelicula(p) {
+  document.getElementById('modalTitulo').textContent = 'Editar pelicula';
+  document.getElementById('peliculaId').value = p.id;
+  document.getElementById('fTitulo').value = p.titulo || '';
+  document.getElementById('fDesc').value = p.descripcion || '';
+  document.getElementById('fDuracion').value = p.duracion || '';
+  document.getElementById('fGenero').value = p.genero || '';
+  document.getElementById('fCategoria').value = p.categoria || 'Cartelera';
+  document.getElementById('fClasificacion').value = p.clasificacion || '';
+  document.getElementById('fEstado').value = p.estado || 'activa';
+  document.getElementById('fTrailer').value = p.trailer_url || '';
+  document.getElementById('fImagen').value = p.imagen_url || '';
+  if (p.imagen_url) {
+    document.getElementById('posterImg').src = p.imagen_url;
+    document.getElementById('previewPoster').style.display = 'block';
+  }
+  document.getElementById('modalPelicula').classList.add('open');
+}
+
+async function guardarPelicula() {
+  const titulo = document.getElementById('fTitulo').value.trim();
+  const duracion = parseInt(document.getElementById('fDuracion').value, 10);
+  if (!titulo || !duracion) {
+    alert('Titulo y duracion son obligatorios.');
+    return;
+  }
+
+  const id = document.getElementById('peliculaId').value;
+  const payload = {
+    titulo,
+    descripcion: document.getElementById('fDesc').value,
+    duracion,
+    genero: document.getElementById('fGenero').value,
+    categoria: document.getElementById('fCategoria').value,
+    clasificacion: document.getElementById('fClasificacion').value,
+    imagen_url: document.getElementById('fImagen').value,
+    trailer_url: document.getElementById('fTrailer').value,
+    estado: document.getElementById('fEstado').value
+  };
+
+  const url = id ? `/api/peliculas/${id}` : '/api/peliculas';
+  const method = id ? 'PUT' : 'POST';
+
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    cerrarModal();
+    location.reload();
+  } else {
+    const err = await res.json();
+    alert(err.error || 'No se pudo guardar la pelicula.');
+  }
+}
+
+function eliminarPelicula(id, titulo) {
+  peliculaEliminarId = id;
+  document.getElementById('nombreEliminar').textContent = `"${titulo}"`;
+  document.getElementById('modalEliminar').classList.add('open');
+}
+
+async function confirmarEliminar() {
+  const res = await fetch(`/api/peliculas/${peliculaEliminarId}`, { method: 'DELETE' });
+  if (res.ok) {
+    document.getElementById('modalEliminar').classList.remove('open');
+    location.reload();
+  }
+}
+
+async function uploadPoster(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const res = await fetch('/admin/api/upload-poster', {
+    method: 'POST',
+    body: formData
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'No se pudo subir la imagen.');
+    return;
+  }
+
+  document.getElementById('fImagen').value = data.path;
+  document.getElementById('posterImg').src = data.path;
+  document.getElementById('previewPoster').style.display = 'block';
+}
+
+const posterFile = document.getElementById('posterFile');
+posterFile.addEventListener('change', event => {
+  const file = event.target.files[0];
+  if (file) uploadPoster(file);
+});
+
+const dropzone = document.getElementById('uploadDropzone');
+dropzone.addEventListener('dragover', event => {
+  event.preventDefault();
+  dropzone.classList.add('dragging');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging'));
+dropzone.addEventListener('drop', event => {
+  event.preventDefault();
+  dropzone.classList.remove('dragging');
+  const file = event.dataTransfer.files[0];
+  if (file) uploadPoster(file);
+});
+</script>
+{% endblock %}

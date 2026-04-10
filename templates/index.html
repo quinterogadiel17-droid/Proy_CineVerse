@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% block title %}Cartelera{% endblock %}
+
+{% block content %}
+<section class="hero hero-home">
+  <div class="hero-copy">
+    <span class="eyebrow">Cartelera inteligente</span>
+    <h1 class="hero-title">Funciones activas en <span>{{ selected_city.nombre if selected_city else 'tu ciudad' }}</span></h1>
+    <p class="hero-subtitle">
+      Filtra por genero, categoria, formato y popularidad. La disponibilidad cambia por sede y por ocupacion en tiempo real.
+    </p>
+
+    <div class="hero-actions">
+      <a href="#cartelera" class="btn btn-primary">Explorar funciones</a>
+      <a href="{{ url_for('choose_location', next=request.path) }}" class="btn btn-secondary">Cambiar ubicacion</a>
+    </div>
+
+    <div class="hero-metrics">
+      <div class="metric-card">
+        <strong>{{ peliculas|length }}</strong>
+        <span>Peliculas visibles</span>
+      </div>
+      <div class="metric-card">
+        <strong>{{ total_funciones }}</strong>
+        <span>Funciones activas</span>
+      </div>
+      <div class="metric-card">
+        <strong>{{ selected_sede.nombre if selected_sede else 'Todas' }}</strong>
+        <span>Sede seleccionada</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-panel">
+    <form class="filter-card" method="get" action="{{ url_for('peliculas.cartelera') }}">
+      <div class="filter-card-header">
+        <span class="eyebrow">Filtros</span>
+        <h2>Refina el catalogo</h2>
+      </div>
+
+      <div class="filter-grid">
+        <div class="form-group">
+          <label class="form-label" for="categoria">Categoria</label>
+          <select id="categoria" name="categoria" class="form-input">
+            <option value="Todas" {% if selected_category == 'Todas' %}selected{% endif %}>Todas</option>
+            {% for category in categories %}
+              <option value="{{ category.categoria }}" {% if selected_category == category.categoria %}selected{% endif %}>{{ category.categoria }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="genero">Genero</label>
+          <select id="genero" name="genero" class="form-input">
+            <option value="Todos" {% if selected_genero == 'Todos' %}selected{% endif %}>Todos</option>
+            {% for genre in genres %}
+              <option value="{{ genre.genero }}" {% if selected_genero == genre.genero %}selected{% endif %}>{{ genre.genero }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="formato">Formato</label>
+          <select id="formato" name="formato" class="form-input">
+            <option value="Todos" {% if selected_format == 'Todos' %}selected{% endif %}>Todos</option>
+            {% for format_option in format_options %}
+              <option value="{{ format_option }}" {% if selected_format == format_option %}selected{% endif %}>{{ format_option }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="orden">Ordenar por</label>
+          <select id="orden" name="orden" class="form-input">
+            <option value="popularidad" {% if selected_order == 'popularidad' %}selected{% endif %}>Popularidad</option>
+            <option value="reciente" {% if selected_order == 'reciente' %}selected{% endif %}>Recientes</option>
+            <option value="precio" {% if selected_order == 'precio' %}selected{% endif %}>Precio</option>
+            <option value="alfabetico" {% if selected_order == 'alfabetico' %}selected{% endif %}>A-Z</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" type="submit">Actualizar cartelera</button>
+    </form>
+
+    {% if featured_movie %}
+      <article class="featured-card">
+        <img src="{{ featured_movie.imagen_url }}" alt="{{ featured_movie.titulo }}" class="featured-poster">
+        <div class="featured-body">
+          <span class="featured-pill">{{ featured_movie.categoria }}</span>
+          <h2>{{ featured_movie.titulo }}</h2>
+          <p>{{ featured_movie.descripcion }}</p>
+          <div class="featured-meta">
+            <span>{{ featured_movie.genero }}</span>
+            <span>{{ featured_movie.duracion }} min</span>
+            <span>{{ featured_movie.rating_promedio or 0 }} / 10</span>
+          </div>
+          <a href="{{ url_for('peliculas.detalle', id=featured_movie.id, formato=selected_format) }}" class="btn btn-secondary">Ver detalle</a>
+        </div>
+      </article>
+    {% endif %}
+  </div>
+</section>
+
+{% if sedes %}
+<section class="section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Sedes disponibles</span>
+      <h2 class="section-title">Explora ubicaciones en {{ selected_city.nombre }}</h2>
+    </div>
+  </div>
+
+  <div class="chip-row">
+    <span class="chip {% if not selected_sede_id %}active{% endif %}">Todas las sedes</span>
+    {% for sede in sedes %}
+      <span class="chip {% if selected_sede_id == sede.id %}active{% endif %}">
+        {{ sede.nombre }} <span>{{ sede.total_funciones }}</span>
+      </span>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="section" id="cartelera">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Catalogo</span>
+      <h2 class="section-title">Peliculas y funciones</h2>
+    </div>
+    <p class="section-description">
+      Mostrando resultados para {{ selected_city.nombre if selected_city else 'tu ciudad' }}
+      {% if selected_sede %}en {{ selected_sede.nombre }}{% endif %}.
+    </p>
+  </div>
+
+  {% if peliculas %}
+    <div class="movies-grid">
+      {% for pelicula in peliculas %}
+        <article class="movie-card" onclick="location.href='{{ url_for('peliculas.detalle', id=pelicula.id, formato=selected_format) }}'">
+          <div class="movie-poster">
+            <img src="{{ pelicula.imagen_url }}" alt="{{ pelicula.titulo }}" loading="lazy">
+            <div class="movie-gradient"></div>
+            <span class="movie-badge">{{ pelicula.categoria }}</span>
+            {% if pelicula.clasificacion %}
+              <span class="badge-age">{{ pelicula.clasificacion }}</span>
+            {% endif %}
+            <div class="movie-overlay">
+              <button class="btn-ghost">Ver funciones</button>
+            </div>
+          </div>
+
+          <div class="movie-info">
+            <div class="movie-topline">
+              <span class="movie-genre">{{ pelicula.genero or 'Cartelera' }}</span>
+              <span class="movie-functions">{{ pelicula.popularidad }} compras</span>
+            </div>
+            <h3 class="movie-title">{{ pelicula.titulo }}</h3>
+            <div class="movie-meta">
+              <span>{{ pelicula.duracion }} min</span>
+              <span>{{ pelicula.formatos or 'Sin formato' }}</span>
+              <span>{{ pelicula.rating_promedio or 0 }} / 10</span>
+            </div>
+            <p class="movie-copy">{{ pelicula.descripcion or 'Sinopsis en actualizacion.' }}</p>
+            <div class="movie-footer">
+              <strong>{{ pelicula.precio_desde|format_currency if pelicula.precio_desde else 'Sin funciones' }}</strong>
+              <span>{{ pelicula.fechas or 'Proximamente' }}</span>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <strong>No encontramos peliculas con esos filtros.</strong>
+      <p>Ajusta el genero, la categoria o cambia de sede para ver mas opciones.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

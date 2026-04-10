@@ -1,0 +1,53 @@
+MANIFIESTO DE IMAGENES CINEVERSE
+================================
+
+Nombre de imagen: duna-parte-dos.svg
+Ruta: /static/img/posters/duna-parte-dos.svg
+Descripcion: Poster principal de Duna: Parte Dos
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: el-especialista.svg
+Ruta: /static/img/posters/el-especialista.svg
+Descripcion: Poster principal de El Especialista
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: flow.svg
+Ruta: /static/img/posters/flow.svg
+Descripcion: Poster principal de Flow
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: godzilla-kong.svg
+Ruta: /static/img/posters/godzilla-kong.svg
+Descripcion: Poster principal de Godzilla y Kong: El Nuevo Imperio
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: intensa-mente-2.svg
+Ruta: /static/img/posters/intensa-mente-2.svg
+Descripcion: Poster principal de Intensa-Mente 2
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: kung-fu-panda-4.svg
+Ruta: /static/img/posters/kung-fu-panda-4.svg
+Descripcion: Poster principal de Kung Fu Panda 4
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: mickey-17.svg
+Ruta: /static/img/posters/mickey-17.svg
+Descripcion: Poster principal de Mickey 17
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: mision-imposible-sentencia-final.svg
+Ruta: /static/img/posters/mision-imposible-sentencia-final.svg
+Descripcion: Poster principal de Mision Imposible: Sentencia Final
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: nosferatu.svg
+Ruta: /static/img/posters/nosferatu.svg
+Descripcion: Poster principal de Nosferatu
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------
+Nombre de imagen: robot-salvaje.svg
+Ruta: /static/img/posters/robot-salvaje.svg
+Descripcion: Poster principal de Robot Salvaje
+Ubicacion en UI: Cartelera, detalle de pelicula, panel admin y ticket
+----------------------------------------

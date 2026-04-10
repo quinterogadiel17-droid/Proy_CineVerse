@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Seleccionar ubicación{% endblock %}
+
+{% block content %}
+<section class="section location-onboarding">
+  <div class="location-card">
+    <span class="eyebrow">Inicio obligatorio</span>
+    <h1 class="section-title">Selecciona tu ciudad y sede</h1>
+    <p class="section-description">
+      La cartelera, las funciones y la disponibilidad cambian según la ubicación.
+    </p>
+
+    <form method="post" action="{{ url_for('update_location') }}" class="location-picker-form">
+      <input type="hidden" name="next" value="{{ next_url }}">
+
+      <div class="form-group">
+        <label class="form-label" for="city_id">Ciudad</label>
+        <div class="select-wrapper">
+          <select id="city_id" name="city_id" class="form-input js-city-select" data-sede-target="locationSede">
+            {% for city in cities %}
+              <option value="{{ city.id }}" {% if current_city_id == city.id %}selected{% endif %}>{{ city.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="sede_id">Sede</label>
+        <div class="select-wrapper">
+          <select id="sede_id" name="sede_id" class="form-input js-sede-select">
+            <option value="">Todas las sedes</option>
+            {# Usamos la lógica del primero: header_sedes y selected_sede #}
+            {% for sede in header_sedes %}
+              <option value="{{ sede.id }}" {% if selected_sede and selected_sede.id == sede.id %}selected{% endif %}>
+                {{ sede.nombre }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block" type="submit">Entrar a la cartelera</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

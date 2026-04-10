@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#110c08" />
+      <stop offset="55%" stop-color="#7a4d19" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <circle cx="450" cy="190" r="120" fill="#fbd38d" fill-opacity="0.28" />
+  <path d="M0 690C114 582 204 528 301 518c100-9 182 24 299 125v257H0Z" fill="#120b07" fill-opacity="0.8" />
+  <text x="54" y="92" fill="#ffe7b0" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="54" y="648" fill="#fff7dd" font-family="Space Grotesk, Arial, sans-serif" font-size="68" font-weight="700">DUNA</text>
+  <text x="54" y="716" fill="#fff7dd" font-family="Space Grotesk, Arial, sans-serif" font-size="68" font-weight="700">PARTE DOS</text>
+  <text x="54" y="790" fill="#fcd38d" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">ESTRENO IMAX</text>
+</svg>

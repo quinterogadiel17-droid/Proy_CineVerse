@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Crear cuenta{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <span class="eyebrow">Nuevo perfil</span>
+    <h1 class="auth-title">Crea tu cuenta</h1>
+    <p class="auth-sub">Registra tus datos con Gmail, confirma tu correo y prepara una experiencia de cine mas personalizada.</p>
+
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <input type="text" name="nombre" class="form-input" placeholder="Tu nombre" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-input" placeholder="tu@email.com" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contrasena</label>
+        <input type="password" name="password" class="form-input" placeholder="Minimo 6 caracteres" minlength="6" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.5rem">Crear cuenta</button>
+    </form>
+
+    <p class="auth-footer">Ya tienes cuenta? <a href="{{ url_for('auth.login') }}">Inicia sesion</a></p>
+  </div>
+</div>
+{% endblock %}

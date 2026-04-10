@@ -1,0 +1,191 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Gestion de Usuarios{% endblock %}
+
+{% block admin_content %}
+<div class="admin-header-row">
+  <div>
+    <span class="eyebrow">Control de acceso</span>
+    <h1 class="admin-title">Usuarios</h1>
+  </div>
+</div>
+
+<div class="detail-filters" style="margin-bottom:1rem">
+  <span class="chip"><span>{{ stats.total_usuarios or 0 }}</span> usuarios totales</span>
+  <span class="chip"><span>{{ stats.total_clientes or 0 }}</span> clientes</span>
+  <span class="chip"><span>{{ stats.total_bloqueados or 0 }}</span> bloqueados</span>
+</div>
+
+<form method="GET" class="admin-filter-bar">
+  <div class="form-group">
+    <label class="form-label">Buscar por nombre</label>
+    <input type="text" name="nombre" class="form-input" value="{{ filtros.nombre }}" placeholder="Ej: Laura Perez">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Buscar por correo</label>
+    <input type="text" name="email" class="form-input" value="{{ filtros.email }}" placeholder="correo@ejemplo.com">
+  </div>
+  <div class="inline-actions">
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+    <a href="{{ url_for('admin.usuarios') }}" class="btn btn-secondary">Limpiar</a>
+  </div>
+</form>
+
+<div class="bulk-bar">
+  <label class="bulk-checkbox">
+    <input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this.checked)">
+    Seleccionar visibles
+  </label>
+  <span id="bulkSelectionCount" class="chip">0 seleccionados</span>
+  <select id="bulkAction" class="form-input bulk-select">
+    <option value="">Accion masiva...</option>
+    <option value="block">Bloquear seleccionados</option>
+    <option value="delete">Eliminar seleccionados</option>
+  </select>
+  <button type="button" class="btn btn-secondary" onclick="applyBulkAction()">Aplicar</button>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Nombre</th>
+        <th>Email</th>
+        <th>Rol</th>
+        <th>Verificado</th>
+        <th>Activo</th>
+        <th>Reservas activas</th>
+        <th>Registro</th>
+        <th>Ultimo acceso</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in usuarios %}
+        <tr id="user-{{ user.id }}">
+          <td>
+            {% if user.rol != 'admin' %}
+              <input type="checkbox" class="user-check" value="{{ user.id }}" onchange="updateBulkSelectionCount()">
+            {% endif %}
+          </td>
+          <td>{{ user.nombre }}</td>
+          <td>{{ user.email }}</td>
+          <td>
+            {{ user.rol }}
+            {% if user.rol == 'admin' %}<span class="admin-badge" style="margin-left:.4rem">ADMIN</span>{% endif %}
+          </td>
+          <td>{{ 'Si' if user.verificado else 'No' }}</td>
+          <td id="status-{{ user.id }}">{{ 'Activo' if user.activo else 'Bloqueado' }}</td>
+          <td>
+            {% if user.reservas_activas %}
+              <span class="chip active">{{ user.reservas_activas }} reservas</span>
+            {% else %}
+              <span class="chip">Sin reservas</span>
+            {% endif %}
+          </td>
+          <td>{{ user.fecha_creacion.strftime('%d/%m/%Y') if user.fecha_creacion else '' }}</td>
+          <td>{{ user.ultimo_login.strftime('%d/%m/%Y %H:%M') if user.ultimo_login else 'Sin acceso' }}</td>
+          <td>
+            {% if user.rol != 'admin' %}
+              <div class="inline-actions">
+                <button class="btn btn-secondary btn-sm" onclick="toggleUser({{ user.id }}, {{ 'true' if user.activo else 'false' }}, {{ user.nombre|tojson }})">
+                  {{ 'Bloquear' if user.activo else 'Reactivar' }}
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="deleteUser({{ user.id }}, {{ user.nombre|tojson }})">
+                  Eliminar
+                </button>
+              </div>
+            {% else %}
+              <span class="chip active">Protegido</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" style="text-align:center; padding:2rem">No hay usuarios registrados con esos filtros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function selectedUserIds() {
+  return Array.from(document.querySelectorAll('.user-check:checked')).map(input => Number(input.value));
+}
+
+function updateBulkSelectionCount() {
+  const count = selectedUserIds().length;
+  document.getElementById('bulkSelectionCount').textContent = `${count} seleccionados`;
+}
+
+function toggleAllUsers(checked) {
+  document.querySelectorAll('.user-check').forEach(input => {
+    input.checked = checked;
+  });
+  updateBulkSelectionCount();
+}
+
+async function toggleUser(userId, isActive, userName) {
+  const actionLabel = isActive ? 'bloquear' : 'reactivar';
+  if (!confirm(`¿Deseas ${actionLabel} a ${userName}?`)) return;
+
+  const res = await fetch(`/admin/api/usuarios/${userId}/estado`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'No se pudo actualizar el usuario.');
+    return;
+  }
+  location.reload();
+}
+
+async function deleteUser(userId, userName) {
+  const confirmed = confirm(`Eliminar a ${userName} cancelara sus reservas activas y liberara sus asientos. ¿Deseas continuar?`);
+  if (!confirmed) return;
+
+  const res = await fetch(`/admin/api/usuarios/${userId}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'No se pudo eliminar el usuario.');
+    return;
+  }
+  location.reload();
+}
+
+async function applyBulkAction() {
+  const action = document.getElementById('bulkAction').value;
+  const userIds = selectedUserIds();
+
+  if (!action) {
+    alert('Selecciona una accion masiva.');
+    return;
+  }
+
+  if (!userIds.length) {
+    alert('Selecciona al menos un usuario.');
+    return;
+  }
+
+  const actionText = action === 'delete'
+    ? 'Eliminar los usuarios seleccionados cancelara sus reservas activas y liberara sus asientos. ¿Deseas continuar?'
+    : 'Bloquear los usuarios seleccionados impedira nuevos accesos. ¿Deseas continuar?';
+
+  if (!confirm(actionText)) return;
+
+  const res = await fetch('/admin/api/usuarios/acciones-masivas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, user_ids: userIds })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'No se pudo completar la accion masiva.');
+    return;
+  }
+  location.reload();
+}
+
+updateBulkSelectionCount();
+</script>
+{% endblock %}

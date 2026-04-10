@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#031120" />
+      <stop offset="55%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#84cc16" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <path d="M0 694c117-60 199-96 300-96 96 0 190 32 300 92v210H0Z" fill="#031013" fill-opacity="0.85" />
+  <path d="M150 520l42-158 48 130 58-182 84 210 41-116 47 116" fill="none" stroke="#d9f99d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="54" y="92" fill="#ddf4ff" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="54" y="676" fill="#ecfccb" font-family="Space Grotesk, Arial, sans-serif" font-size="64" font-weight="700">GODZILLA</text>
+  <text x="54" y="750" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="58" font-weight="700">Y KONG</text>
+  <text x="54" y="806" fill="#bef264" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">TENDENCIAS 3D</text>
+</svg>

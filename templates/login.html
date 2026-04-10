@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Iniciar sesion{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <span class="eyebrow">Acceso a {{ app_name }}</span>
+    <h1 class="auth-title">Inicia tu sesion</h1>
+    <p class="auth-sub">Accede a tus reservas, historial de compra y funciones favoritas.</p>
+
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-input" placeholder="tu@email.com" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contrasena</label>
+        <input type="password" name="password" class="form-input" placeholder="Tu clave" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.5rem">Entrar</button>
+    </form>
+
+    <p class="auth-footer">No tienes cuenta? <a href="{{ url_for('auth.registro') }}">Registrate</a></p>
+  </div>
+</div>
+{% endblock %}

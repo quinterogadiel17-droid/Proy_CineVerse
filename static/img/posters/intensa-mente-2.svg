@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07112e" />
+      <stop offset="50%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)" />
+  <circle cx="150" cy="190" r="90" fill="#67e8f9" fill-opacity="0.65" />
+  <circle cx="322" cy="228" r="72" fill="#fef08a" fill-opacity="0.55" />
+  <circle cx="465" cy="166" r="102" fill="#f9a8d4" fill-opacity="0.45" />
+  <rect x="42" y="590" width="516" height="222" rx="32" fill="#081127" fill-opacity="0.74" />
+  <text x="62" y="92" fill="#dbeafe" font-family="Space Grotesk, Arial, sans-serif" font-size="30" letter-spacing="10">CINEVERSE</text>
+  <text x="62" y="676" fill="#ffffff" font-family="Space Grotesk, Arial, sans-serif" font-size="62" font-weight="700">INTENSA-MENTE</text>
+  <text x="62" y="748" fill="#fdf2f8" font-family="Space Grotesk, Arial, sans-serif" font-size="104" font-weight="700">2</text>
+  <text x="62" y="804" fill="#fde68a" font-family="Manrope, Arial, sans-serif" font-size="28" letter-spacing="4">FAMILIA Y ANIMACION</text>
+</svg>
