@@ -712,8 +712,8 @@ app.jinja_env.filters["format_currency"] = format_currency
 
 # ── Bootstrap de la base de datos (protegido para no matar el proceso) ────────
 try:
-    print("Iniciando bootstrap de la base de datos...")
-    # bootstrap_database()
+    if os.environ.get("RENDER") != "true":
+        bootstrap_database()
     print("Base de datos lista.")
 except Exception as e:
     print(f"ALERTA: No se pudo conectar a la DB al iniciar: {e}")
@@ -932,5 +932,5 @@ app.register_blueprint(auth_bp)
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
