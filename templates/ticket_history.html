@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}Mis Tiquetes{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Historial personal</span>
+      <h1 class="section-title">Mis tiquetes</h1>
+    </div>
+    <p class="section-description">Consulta tus compras, revisa su estado y cancela reservas cuando aun esten vigentes.</p>
+  </div>
+
+  <div id="ticketHistoryFeedback" class="inline-success" style="display:none; margin-bottom:1rem"></div>
+
+  <div class="booking-layout" style="grid-template-columns:1fr">
+    {% for ticket in tickets %}
+      <article class="ticket-card" id="history-ticket-{{ ticket.codigo }}" style="margin-bottom:1rem">
+        <div class="ticket-header">
+          <div>
+            <span class="eyebrow">{{ ticket.confirmacion_estado }}</span>
+            <h2>{{ ticket.titulo }}</h2>
+          </div>
+          <span class="chip {% if ticket.estado == 'activo' %}active{% else %}{{ ticket.estado }}{% endif %}">
+            {{ ticket.estado.upper() }}
+          </span>
+        </div>
+
+        <div class="ticket-body">
+          <div class="ticket-movie">
+            <img src="{{ ticket.imagen_url }}" alt="{{ ticket.titulo }}">
+            <div>
+              <p>{{ ticket.ciudad_nombre }} · {{ ticket.sede_nombre }}</p>
+              <span>{{ ticket.fecha_funcion_text }} · {{ ticket.hora_funcion_text }} · {{ ticket.formato }} · {{ ticket.sala }}</span>
+            </div>
+          </div>
+
+          <div class="ticket-grid">
+            <div class="ticket-line">
+              <span>Codigo</span>
+              <strong>{{ ticket.codigo }}</strong>
+            </div>
+            <div class="ticket-line">
+              <span>Compra</span>
+              <strong>{{ ticket.fecha_compra_text }}</strong>
+            </div>
+            <div class="ticket-line">
+              <span>Asientos</span>
+              <strong>{{ ticket.asientos|join(', ') if ticket.asientos else 'Sin asientos asignados' }}</strong>
+            </div>
+            <div class="ticket-line">
+              <span>Total</span>
+              <strong>{{ ticket.total|format_currency }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="ticket-actions">
+          <a href="{{ url_for('tiquetes.ver_tiquete', codigo=ticket.codigo) }}" class="btn btn-primary">Ver detalle</a>
+          {% if ticket.can_cancel %}
+            <button class="btn btn-danger" onclick="cancelHistoryTicket({{ ticket.codigo|tojson }})">Cancelar</button>
+          {% endif %}
+        </div>
+      </article>
+    {% else %}
+      <article class="ticket-card">
+        <div class="ticket-body">
+          <p>Aun no tienes tiquetes comprados.</p>
+          <a href="{{ url_for('peliculas.cartelera') }}" class="btn btn-primary">Ir a cartelera</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function showTicketHistoryFeedback(message, isError = false) {
+  const box = document.getElementById('ticketHistoryFeedback');
+  box.className = isError ? 'inline-error' : 'inline-success';
+  box.textContent = message;
+  box.style.display = 'block';
+}
+
+async function cancelHistoryTicket(ticketCode) {
+  const confirmed = confirm('Cancelar esta reserva liberara automaticamente sus asientos. Deseas continuar?');
+  if (!confirmed) return;
+
+  const res = await fetch(`/api/tiquetes/${encodeURIComponent(ticketCode)}/cancelar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    showTicketHistoryFeedback(data.error || 'No se pudo cancelar el tiquete.', true);
+    return;
+  }
+
+  showTicketHistoryFeedback(data.mensaje || 'Tiquete cancelado.');
+  setTimeout(() => window.location.reload(), 500);
+}
+</script>
+{% endblock %}

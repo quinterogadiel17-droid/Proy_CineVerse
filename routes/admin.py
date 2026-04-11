@@ -1,11 +1,12 @@
 from collections import defaultdict
 from functools import wraps
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from catalog import PROJECTION_FORMATS
 from extensions import mysql
 from services.asset_service import append_asset_manifest, save_uploaded_poster
+from services.email_service import generate_email_token, send_confirmation_email_async
 from services.reservation_service import (
     ReservationConflictError,
     ReservationValidationError,
@@ -26,6 +27,13 @@ def admin_required(view):
         return view(*args, **kwargs)
 
     return decorated
+
+
+def queue_confirmation_email_for_user(user_name, email):
+    token = generate_email_token(email)
+    confirm_url = url_for("auth.confirm_account", token=token, _external=True)
+    status, error = send_confirmation_email_async(user_name, email, confirm_url)
+    return status, error, confirm_url
 
 
 @admin_bp.route("/")
@@ -201,7 +209,8 @@ def usuarios():
         SELECT
             COUNT(*) AS total_usuarios,
             SUM(CASE WHEN rol = 'cliente' THEN 1 ELSE 0 END) AS total_clientes,
-            SUM(CASE WHEN activo = 0 THEN 1 ELSE 0 END) AS total_bloqueados
+            SUM(CASE WHEN activo = 0 THEN 1 ELSE 0 END) AS total_bloqueados,
+            SUM(CASE WHEN verificado = 0 THEN 1 ELSE 0 END) AS total_no_verificados
         FROM usuarios
         """
     )
@@ -250,6 +259,190 @@ def toggle_user_status(user_id):
             {
                 "activo": bool(new_status),
                 "mensaje": "Usuario reactivado." if new_status else "Usuario bloqueado.",
+            }
+        )
+    except Exception as exc:
+        mysql.connection.rollback()
+        cur.close()
+        return jsonify({"error": "No se pudo actualizar el usuario.", "detalle": str(exc)}), 500
+
+
+@admin_bp.route("/api/usuarios/<int:user_id>/verificar", methods=["POST"])
+@admin_required
+def verify_user(user_id):
+    cur = mysql.connection.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nombre, email, rol, verificado FROM usuarios WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            cur.close()
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        if user["rol"] == "admin":
+            cur.close()
+            return jsonify({"error": "Los administradores ya estan verificados."}), 400
+
+        if user["verificado"]:
+            cur.close()
+            return jsonify({"verificado": True, "mensaje": "El usuario ya estaba verificado."})
+
+        cur.execute(
+            """
+            UPDATE usuarios
+            SET verificado = 1, fecha_confirmacion = NOW(), activo = 1
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        log_admin_action(
+            cur,
+            session["user_id"],
+            "verify_user",
+            {
+                "target_user_id": user["id"],
+                "target_user_email": user["email"],
+                "target_user_name": user["nombre"],
+            },
+        )
+        mysql.connection.commit()
+        cur.close()
+        return jsonify({"verificado": True, "mensaje": "Usuario verificado manualmente."})
+    except Exception as exc:
+        mysql.connection.rollback()
+        cur.close()
+        return jsonify({"error": "No se pudo verificar el usuario.", "detalle": str(exc)}), 500
+
+
+@admin_bp.route("/api/usuarios/<int:user_id>/reenviar-verificacion", methods=["POST"])
+@admin_required
+def resend_user_verification(user_id):
+    cur = mysql.connection.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nombre, email, rol, verificado, activo FROM usuarios WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            cur.close()
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        if user["rol"] == "admin":
+            cur.close()
+            return jsonify({"error": "No aplica para administradores."}), 400
+
+        cur.close()
+        status, error, _ = queue_confirmation_email_for_user(user["nombre"], user["email"])
+        if status == "failed":
+            return jsonify({"error": error or "No se pudo reenviar el correo."}), 502
+
+        cur = mysql.connection.cursor(dictionary=True)
+        log_admin_action(
+            cur,
+            session["user_id"],
+            "resend_user_verification",
+            {
+                "target_user_id": user["id"],
+                "target_user_email": user["email"],
+                "target_user_name": user["nombre"],
+                "mail_status": status,
+            },
+        )
+        mysql.connection.commit()
+        cur.close()
+        return jsonify(
+            {
+                "mensaje": (
+                    "Correo de verificacion reenviado."
+                    if status == "sent"
+                    else "Correo de verificacion encolado para envio."
+                )
+            }
+        )
+    except Exception as exc:
+        mysql.connection.rollback()
+        try:
+            cur.close()
+        except Exception:
+            pass
+        current_app.logger.warning("No se pudo reenviar verificacion para user_id=%s: %s", user_id, exc)
+        return jsonify({"error": "No se pudo reenviar la verificacion.", "detalle": str(exc)}), 500
+
+
+@admin_bp.route("/api/usuarios/<int:user_id>", methods=["PUT"])
+@admin_required
+def update_user(user_id):
+    data = request.get_json(silent=True) or {}
+    nombre = str(data.get("nombre", "")).strip()
+    email = str(data.get("email", "")).strip().lower()
+    activo = data.get("activo")
+    verificado = data.get("verificado")
+
+    if not nombre or not email:
+        return jsonify({"error": "Nombre y correo son obligatorios."}), 400
+
+    cur = mysql.connection.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nombre, email, rol, activo, verificado FROM usuarios WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            cur.close()
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        if user["rol"] == "admin" and email != user["email"]:
+            cur.close()
+            return jsonify({"error": "No puedes cambiar el correo de un administrador desde esta vista."}), 400
+
+        cur.execute("SELECT id FROM usuarios WHERE email = %s AND id != %s LIMIT 1", (email, user_id))
+        if cur.fetchone():
+            cur.close()
+            return jsonify({"error": "Ese correo ya esta en uso."}), 409
+
+        active_value = user["activo"] if activo is None else int(bool(activo))
+        verified_value = user["verificado"] if verificado is None else int(bool(verificado))
+        fecha_confirmacion_sql = "NOW()" if verified_value else "NULL"
+
+        cur.execute(
+            f"""
+            UPDATE usuarios
+            SET nombre = %s,
+                email = %s,
+                activo = %s,
+                verificado = %s,
+                fecha_confirmacion = {fecha_confirmacion_sql}
+            WHERE id = %s
+            """,
+            (nombre, email, active_value, verified_value, user_id),
+        )
+        log_admin_action(
+            cur,
+            session["user_id"],
+            "update_user",
+            {
+                "target_user_id": user["id"],
+                "before": {
+                    "nombre": user["nombre"],
+                    "email": user["email"],
+                    "activo": bool(user["activo"]),
+                    "verificado": bool(user["verificado"]),
+                },
+                "after": {
+                    "nombre": nombre,
+                    "email": email,
+                    "activo": bool(active_value),
+                    "verificado": bool(verified_value),
+                },
+            },
+        )
+        mysql.connection.commit()
+        cur.close()
+        return jsonify(
+            {
+                "mensaje": "Usuario actualizado correctamente.",
+                "usuario": {
+                    "id": user_id,
+                    "nombre": nombre,
+                    "email": email,
+                    "activo": bool(active_value),
+                    "verificado": bool(verified_value),
+                },
             }
         )
     except Exception as exc:

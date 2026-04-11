@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import timedelta
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for, g
@@ -17,6 +18,10 @@ from extensions import mysql
 from services.email_service import get_mail_configuration_status, log_mail_configuration
 
 logger = logging.getLogger(__name__)
+_location_cache = {
+    "expires_at": 0.0,
+    "cities": [],
+}
 
 MESES_ES = {
     1: "enero",
@@ -103,9 +108,55 @@ def load_location_context():
     return cities, current_sedes, selected_city, selected_sede
 
 
+def _load_cached_cities():
+    now = time.time()
+    if _location_cache["cities"] and _location_cache["expires_at"] > now:
+        return _location_cache["cities"]
+
+    cur = mysql.connection.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nombre FROM ciudades ORDER BY nombre")
+        cities = cur.fetchall()
+    finally:
+        cur.close()
+
+    _location_cache["cities"] = cities
+    _location_cache["expires_at"] = now + max(int(Config.MYSQL_LOCATION_CACHE_SECONDS), 15)
+    return cities
+
+
 def get_safe_location_context():
     try:
-        return load_location_context()
+        cities = _load_cached_cities()
+        if not session.get("selected_city_id") and not session.get("selected_sede_id"):
+            return cities, [], None, None
+
+        conn = mysql.connection
+        cur = conn.cursor(dictionary=True)
+        try:
+            selected_city_id = session.get("selected_city_id")
+            selected_sede_id = session.get("selected_sede_id")
+            current_sedes = []
+            selected_city = None
+            selected_sede = None
+
+            if selected_city_id:
+                cur.execute("SELECT id, nombre FROM ciudades WHERE id = %s", (selected_city_id,))
+                selected_city = cur.fetchone()
+
+                cur.execute(
+                    "SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre",
+                    (selected_city_id,),
+                )
+                current_sedes = cur.fetchall()
+
+            if selected_sede_id:
+                cur.execute("SELECT id, nombre, ciudad_id FROM sedes WHERE id = %s", (selected_sede_id,))
+                selected_sede = cur.fetchone()
+        finally:
+            cur.close()
+
+        return cities, current_sedes, selected_city, selected_sede
     except Exception as exc:
         logger.warning("No se pudo cargar el contexto de ubicacion desde la DB: %s", exc)
         return [], [], None, None
@@ -177,6 +228,7 @@ def _register_hooks(app):
             "update_location",
             "api_city_sedes",
             "healthz",
+            "healthz_mail",
             "index",
             "auth.login",
             "auth.registro",
@@ -241,14 +293,12 @@ def _register_routes(app):
     def healthz_mail():
         status = get_mail_configuration_status()
         payload = {
+            "provider": status["provider"],
             "configured": status["configured"],
-            "server": status["server"],
-            "port": status["port"],
-            "use_tls": status["use_tls"],
-            "use_ssl": status["use_ssl"],
-            "username": status["username_masked"],
+            "api_key": status["api_key_masked"],
             "from_email": status["from_email"],
-            "from_source": status["from_source"],
+            "from_name": status["from_name"],
+            "timeout_seconds": status["timeout_seconds"],
             "missing": status["missing"],
         }
         http_status = 200 if status["configured"] else 503
@@ -262,24 +312,20 @@ def _register_routes(app):
         current_city_id = session.get("selected_city_id")
 
         try:
-            db_conn = mysql.connection
-            cur = db_conn.cursor(dictionary=True)
+            cities = _load_cached_cities()
+            first_city_id = cities[0]["id"] if cities else None
+            current_city_id = current_city_id or first_city_id
 
-            try:
-                cur.execute("SELECT id, nombre FROM ciudades ORDER BY nombre")
-                cities = cur.fetchall()
-
-                first_city_id = cities[0]["id"] if cities else None
-                current_city_id = current_city_id or first_city_id
-
-                if current_city_id:
+            if current_city_id:
+                cur = mysql.connection.cursor(dictionary=True)
+                try:
                     cur.execute(
                         "SELECT id, nombre FROM sedes WHERE ciudad_id = %s ORDER BY nombre",
                         (current_city_id,),
                     )
                     sedes = cur.fetchall()
-            finally:
-                cur.close()
+                finally:
+                    cur.close()
         except Exception as exc:
             logger.warning("No se pudo cargar la pantalla de ubicacion desde la DB: %s", exc)
 

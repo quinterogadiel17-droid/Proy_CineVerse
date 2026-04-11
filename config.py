@@ -27,6 +27,9 @@ class Config:
     MYSQL_PORT     = int(os.getenv("DB_PORT", "3306"))
     MYSQL_SSL_CA   = os.getenv("DB_SSL_CA", "/etc/ssl/certs/ca-certificates.crt")
     MYSQL_CURSORCLASS = "DictCursor"
+    MYSQL_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "3"))
+    MYSQL_PING_RECONNECT = env_bool("DB_PING_RECONNECT", False)
+    MYSQL_LOCATION_CACHE_SECONDS = int(os.getenv("DB_LOCATION_CACHE_SECONDS", "120"))
 
     PROJECT_ROOT = BASE_DIR
     UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
@@ -40,17 +43,13 @@ class Config:
     PASSWORD_RESET_TOKEN_SALT = os.getenv("PASSWORD_RESET_TOKEN_SALT", "cinecol-password-reset")
     PASSWORD_RESET_MAX_AGE_SECONDS = int(os.getenv("PASSWORD_RESET_MAX_AGE_SECONDS", "3600"))
 
-    MAIL_SERVER   = os.getenv("MAIL_SERVER", "")
-    MAIL_PORT     = int(os.getenv("MAIL_PORT", "587"))
-    MAIL_USE_TLS  = env_bool("MAIL_USE_TLS", True)
-    MAIL_USE_SSL  = env_bool("MAIL_USE_SSL", False)
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM     = os.getenv("MAIL_FROM", "no-reply@cinecol.com")
+    MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "CineVerse")
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
     MAIL_DEBUG    = env_bool("MAIL_DEBUG", False)
     MAIL_MAX_RETRIES = int(os.getenv("MAIL_MAX_RETRIES", "2"))
     MAIL_RETRY_DELAY_SECONDS = float(os.getenv("MAIL_RETRY_DELAY_SECONDS", "1.5"))
-    MAIL_TIMEOUT_SECONDS = int(os.getenv("MAIL_TIMEOUT_SECONDS", "15"))
-    MAIL_ASYNC_WAIT_TIMEOUT = float(os.getenv("MAIL_ASYNC_WAIT_TIMEOUT", "2.5"))
+    MAIL_TIMEOUT_SECONDS = int(os.getenv("MAIL_TIMEOUT_SECONDS", "10"))
+    MAIL_ASYNC_WAIT_TIMEOUT = float(os.getenv("MAIL_ASYNC_WAIT_TIMEOUT", "0"))
 
     QR_SCAN_INTERVAL_MS = int(os.getenv("QR_SCAN_INTERVAL_MS", "1200"))

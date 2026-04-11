@@ -1,11 +1,10 @@
+import base64
 import logging
-import smtplib
-import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
-from email.message import EmailMessage
 from typing import Iterable, Optional
 
+import requests
 from flask import current_app, has_app_context
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -13,6 +12,7 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 _mail_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mail-worker")
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 def _get_config_value(name):
@@ -23,66 +23,56 @@ def _get_config_value(name):
 
 def _get_mail_settings():
     return {
-        "server": (_get_config_value("MAIL_SERVER") or "").strip(),
-        "port": int(_get_config_value("MAIL_PORT") or 587),
-        "use_tls": bool(_get_config_value("MAIL_USE_TLS")),
-        "use_ssl": bool(_get_config_value("MAIL_USE_SSL")),
-        "username": (_get_config_value("MAIL_USERNAME") or "").strip(),
-        "password": (_get_config_value("MAIL_PASSWORD") or "").strip(),
+        "api_key": (_get_config_value("BREVO_API_KEY") or "").strip(),
         "from_email": (_get_config_value("MAIL_FROM") or "").strip(),
+        "from_name": (_get_config_value("MAIL_FROM_NAME") or "").strip(),
         "debug": bool(_get_config_value("MAIL_DEBUG")),
         "max_retries": int(_get_config_value("MAIL_MAX_RETRIES") or 2),
         "retry_delay_seconds": float(_get_config_value("MAIL_RETRY_DELAY_SECONDS") or 1.5),
-        "timeout_seconds": int(_get_config_value("MAIL_TIMEOUT_SECONDS") or 15),
+        "timeout_seconds": int(_get_config_value("MAIL_TIMEOUT_SECONDS") or 10),
     }
 
 
 def _mask_secret(value):
     if not value:
         return "(empty)"
-    if len(value) <= 4:
+    if len(value) <= 6:
         return "*" * len(value)
-    return f"{value[:2]}***{value[-2:]}"
+    return f"{value[:3]}***{value[-3:]}"
 
 
 def get_mail_configuration_status():
     settings = _get_mail_settings()
-    effective_from = settings["from_email"] or settings["username"]
     missing = [
         key
         for key, value in {
-            "MAIL_SERVER": settings["server"],
-            "MAIL_USERNAME": settings["username"],
-            "MAIL_PASSWORD": settings["password"],
+            "BREVO_API_KEY": settings["api_key"],
+            "MAIL_FROM": settings["from_email"],
         }.items()
         if not value
     ]
-    status = {
+    return {
         "configured": not missing,
         "missing": missing,
-        "server": settings["server"] or "(empty)",
-        "port": settings["port"],
-        "use_tls": settings["use_tls"],
-        "use_ssl": settings["use_ssl"],
-        "username_masked": _mask_secret(settings["username"]),
-        "from_email": effective_from or "(empty)",
-        "from_source": "MAIL_FROM" if settings["from_email"] else "MAIL_USERNAME",
+        "provider": "brevo",
+        "api_key_masked": _mask_secret(settings["api_key"]),
+        "from_email": settings["from_email"] or "(empty)",
+        "from_name": settings["from_name"] or "CineVerse",
+        "timeout_seconds": settings["timeout_seconds"],
     }
-    return status
 
 
 def log_mail_configuration(context="runtime"):
     status = get_mail_configuration_status()
     logger.info(
-        "MAIL CONFIG [%s]: configured=%s server=%s port=%s tls=%s ssl=%s username=%s from=%s missing=%s",
+        "MAIL CONFIG [%s]: provider=%s configured=%s from=%s from_name=%s api_key=%s timeout=%s missing=%s",
         context,
+        status["provider"],
         status["configured"],
-        status["server"],
-        status["port"],
-        status["use_tls"],
-        status["use_ssl"],
-        status["username_masked"],
         status["from_email"],
+        status["from_name"],
+        status["api_key_masked"],
+        status["timeout_seconds"],
         ",".join(status["missing"]) if status["missing"] else "none",
     )
     return status
@@ -119,136 +109,103 @@ def confirm_password_reset_token(token, max_age=None):
         return None
 
 
-def _build_message(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None, mail_settings=None):
+def _build_brevo_payload(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None, mail_settings=None):
     mail_settings = mail_settings or _get_mail_settings()
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = mail_settings["from_email"] or mail_settings["username"]
-    message["To"] = recipient
-    message["Reply-To"] = mail_settings["username"]
-    message["X-Auto-Response-Suppress"] = "All"
-    message.set_content(text_body)
+    payload = {
+        "sender": {
+            "email": mail_settings["from_email"],
+            "name": mail_settings["from_name"] or "CineVerse",
+        },
+        "to": [{"email": recipient}],
+        "subject": subject,
+        "textContent": text_body,
+        "htmlContent": html_body or f"<pre>{text_body}</pre>",
+        "headers": {
+            "X-Auto-Response-Suppress": "All",
+        },
+    }
 
-    if html_body:
-        message.add_alternative(html_body, subtype="html")
-
+    encoded_attachments = []
     for attachment in attachments or []:
-        message.add_attachment(
-            attachment["content"],
-            maintype=attachment.get("maintype", "application"),
-            subtype=attachment.get("subtype", "octet-stream"),
-            filename=attachment.get("filename", "archivo.bin"),
+        encoded_attachments.append(
+            {
+                "name": attachment.get("filename", "archivo.bin"),
+                "content": base64.b64encode(attachment["content"]).decode("ascii"),
+            }
         )
 
-    return message
+    if encoded_attachments:
+        payload["attachment"] = encoded_attachments
+
+    return payload
 
 
-def _smtp_attempt_configs(mail_settings=None):
-    mail_settings = mail_settings or _get_mail_settings()
-    configs = [
-        {
-            "label": "configured",
-            "port": mail_settings["port"],
-            "use_ssl": mail_settings["use_ssl"],
-            "use_tls": mail_settings["use_tls"],
-        }
-    ]
-
-    if mail_settings["server"].lower() == "smtp.gmail.com":
-        gmail_candidates = [
-            {"label": "gmail-ssl", "port": 465, "use_ssl": True, "use_tls": False},
-            {"label": "gmail-starttls", "port": 587, "use_ssl": False, "use_tls": True},
-        ]
-        for candidate in gmail_candidates:
-            duplicate = any(
-                current["port"] == candidate["port"]
-                and current["use_ssl"] == candidate["use_ssl"]
-                and current["use_tls"] == candidate["use_tls"]
-                for current in configs
-            )
-            if not duplicate:
-                configs.append(candidate)
-
-    return configs
-
-
-def _send_email_once(message, recipient, smtp_config, mail_settings):
-    smtp_client = smtplib.SMTP_SSL if smtp_config["use_ssl"] else smtplib.SMTP
-
-    with smtp_client(
-        mail_settings["server"],
-        smtp_config["port"],
+def _send_via_brevo(payload, recipient, mail_settings):
+    response = requests.post(
+        BREVO_API_URL,
+        headers={
+            "accept": "application/json",
+            "api-key": mail_settings["api_key"],
+            "content-type": "application/json",
+        },
+        json=payload,
         timeout=mail_settings["timeout_seconds"],
-    ) as server:
-        if mail_settings["debug"]:
-            server.set_debuglevel(1)
-        server.ehlo()
-        if smtp_config["use_tls"] and not smtp_config["use_ssl"]:
-            server.starttls()
-            server.ehlo()
-        server.login(mail_settings["username"], mail_settings["password"])
-        server.send_message(
-            message,
-            from_addr=mail_settings["from_email"] or mail_settings["username"],
-            to_addrs=[recipient],
-        )
+    )
+
+    if response.ok:
+        logger.info("Correo entregado a Brevo para %s con status=%s", recipient, response.status_code)
+        return True, None
+
+    error_message = f"Brevo devolvio {response.status_code}"
+    try:
+        body = response.json()
+        api_message = body.get("message") or body.get("code") or str(body)
+        error_message = f"{error_message}: {api_message}"
+    except Exception:
+        if response.text:
+            error_message = f"{error_message}: {response.text[:200]}"
+
+    logger.warning("Error Brevo para %s: %s", recipient, error_message)
+    return False, error_message
 
 
 def _send_email_with_settings(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None, mail_settings=None):
     mail_settings = mail_settings or _get_mail_settings()
-    mail_status = {
-        "configured": all(
-            [
-                mail_settings["server"],
-                mail_settings["username"],
-                mail_settings["password"],
-            ]
-        ),
-        "missing": [
-            key
-            for key, value in {
-                "MAIL_SERVER": mail_settings["server"],
-                "MAIL_USERNAME": mail_settings["username"],
-                "MAIL_PASSWORD": mail_settings["password"],
-            }.items()
-            if not value
-        ],
-    }
-    if not mail_status["configured"]:
-        logger.warning("SMTP incompleto para %s. Faltan: %s", recipient, ",".join(mail_status["missing"]))
-        return False, f"SMTP no configurado. Faltan: {', '.join(mail_status['missing'])}"
+    missing = [
+        key
+        for key, value in {
+            "BREVO_API_KEY": mail_settings["api_key"],
+            "MAIL_FROM": mail_settings["from_email"],
+        }.items()
+        if not value
+    ]
+    if missing:
+        logger.warning("Servicio de correo incompleto para %s. Faltan: %s", recipient, ",".join(missing))
+        return False, f"Correo no configurado. Faltan: {', '.join(missing)}"
 
-    message = _build_message(subject, recipient, text_body, html_body, attachments, mail_settings=mail_settings)
-    last_error = None
+    payload = _build_brevo_payload(
+        subject,
+        recipient,
+        text_body,
+        html_body=html_body,
+        attachments=attachments,
+        mail_settings=mail_settings,
+    )
 
-    for smtp_config in _smtp_attempt_configs(mail_settings):
-        try:
-            _send_email_once(message, recipient, smtp_config, mail_settings)
-            logger.info(
-                "Correo enviado a %s usando %s (%s:%s).",
-                recipient,
-                smtp_config["label"],
-                mail_settings["server"],
-                smtp_config["port"],
-            )
-            return True, None
-        except smtplib.SMTPAuthenticationError as exc:
-            last_error = (
-                "Autenticacion SMTP rechazada. Verifica MAIL_USERNAME, la App Password de Gmail "
-                "y que la verificacion en dos pasos siga activa."
-            )
-            logger.error("SMTP auth error para %s usando %s: %s", recipient, smtp_config["label"], exc)
-        except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, socket.timeout, TimeoutError) as exc:
-            last_error = f"Timeout o desconexion SMTP usando {smtp_config['label']}: {exc}"
-            logger.warning("SMTP timeout/desconexion para %s usando %s: %s", recipient, smtp_config["label"], exc)
-        except smtplib.SMTPException as exc:
-            last_error = f"Error SMTP usando {smtp_config['label']}: {exc}"
-            logger.warning("SMTP error para %s usando %s: %s", recipient, smtp_config["label"], exc)
-        except Exception as exc:
-            last_error = f"Error inesperado usando {smtp_config['label']}: {exc}"
-            logger.exception("Error inesperado enviando correo a %s con %s", recipient, smtp_config["label"])
-
-    return False, last_error or "No fue posible enviar el correo."
+    try:
+        return _send_via_brevo(payload, recipient, mail_settings)
+    except requests.Timeout as exc:
+        message = f"Timeout enviando correo con Brevo: {exc}"
+        logger.warning("Timeout Brevo para %s: %s", recipient, exc)
+        return False, message
+    except requests.RequestException as exc:
+        message = f"Error de red con Brevo: {exc}"
+        logger.warning("Error de red Brevo para %s: %s", recipient, exc)
+        return False, message
+    except Exception as exc:
+        message = f"Error inesperado enviando correo: {exc}"
+        logger.exception("Error inesperado Brevo para %s", recipient)
+        return False, message
 
 
 def send_email(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
@@ -257,54 +214,40 @@ def send_email(subject, recipient, text_body, html_body=None, attachments: Optio
 
 def _run_async_email(payload):
     mail_settings = payload["mail_settings"]
-    subject = payload["subject"]
-    recipient = payload["recipient"]
-    text_body = payload["text_body"]
-    html_body = payload.get("html_body")
-    attachments = payload.get("attachments")
-
     last_error = None
     max_attempts = max(mail_settings["max_retries"] + 1, 1)
 
     for attempt in range(1, max_attempts + 1):
         sent, error = _send_email_with_settings(
-            subject,
-            recipient,
-            text_body,
-            html_body,
-            attachments,
+            payload["subject"],
+            payload["recipient"],
+            payload["text_body"],
+            payload.get("html_body"),
+            payload.get("attachments"),
             mail_settings=mail_settings,
         )
         if sent:
-            return {
-                "ok": True,
-                "error": None,
-                "attempts": attempt,
-            }
+            return {"ok": True, "error": None, "attempts": attempt}
         last_error = error
         if attempt < max_attempts:
             time.sleep(mail_settings["retry_delay_seconds"])
 
     logger.error(
-        "No fue posible enviar correo a %s despues de %s intentos: %s",
-        recipient,
+        "No fue posible enviar correo a %s por Brevo despues de %s intentos: %s",
+        payload["recipient"],
         max_attempts,
         last_error,
     )
-    return {
-        "ok": False,
-        "error": last_error or "No fue posible enviar el correo.",
-        "attempts": max_attempts,
-    }
+    return {"ok": False, "error": last_error or "No fue posible enviar el correo.", "attempts": max_attempts}
 
 
 def _log_async_result(recipient, future):
     try:
         result = future.result()
         if result["ok"]:
-            logger.info("Entrega SMTP completada para %s tras %s intento(s).", recipient, result["attempts"])
+            logger.info("Entrega Brevo completada para %s tras %s intento(s).", recipient, result["attempts"])
         else:
-            logger.error("Entrega SMTP fallida para %s: %s", recipient, result["error"])
+            logger.error("Entrega Brevo fallida para %s: %s", recipient, result["error"])
     except Exception:
         logger.exception("Fallo inesperado procesando el resultado del correo a %s", recipient)
 
@@ -312,10 +255,8 @@ def _log_async_result(recipient, future):
 def send_email_async(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
     mail_status = get_mail_configuration_status()
     if not mail_status["configured"]:
-        logger.warning("SMTP no disponible al encolar correo para %s. Faltan: %s", recipient, ",".join(mail_status["missing"]))
-        return "failed", f"SMTP no configurado. Faltan: {', '.join(mail_status['missing'])}"
-
-    mail_settings = _get_mail_settings()
+        logger.warning("Brevo no disponible al encolar correo para %s. Faltan: %s", recipient, ",".join(mail_status["missing"]))
+        return "failed", f"Correo no configurado. Faltan: {', '.join(mail_status['missing'])}"
 
     payload = {
         "subject": subject,
@@ -323,7 +264,7 @@ def send_email_async(subject, recipient, text_body, html_body=None, attachments:
         "text_body": text_body,
         "html_body": html_body,
         "attachments": list(attachments or []),
-        "mail_settings": mail_settings,
+        "mail_settings": _get_mail_settings(),
     }
 
     try:
@@ -333,7 +274,7 @@ def send_email_async(subject, recipient, text_body, html_body=None, attachments:
         logger.exception("No se pudo encolar el correo para %s", recipient)
         return "failed", str(exc)
 
-    logger.info("Correo a %s encolado para entrega en background.", recipient)
+    logger.info("Correo a %s encolado para entrega en background con Brevo.", recipient)
     return "queued", None
 
 
@@ -411,8 +352,6 @@ def send_ticket_email(user_name, email, ticket_url, ticket_code, qr_png_bytes):
     attachments = [
         {
             "content": qr_png_bytes,
-            "maintype": "image",
-            "subtype": "png",
             "filename": f"{ticket_code}.png",
         }
     ]
@@ -438,8 +377,6 @@ def send_ticket_email_async(user_name, email, ticket_url, ticket_code, qr_png_by
     attachments = [
         {
             "content": qr_png_bytes,
-            "maintype": "image",
-            "subtype": "png",
             "filename": f"{ticket_code}.png",
         }
     ]

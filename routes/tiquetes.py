@@ -41,6 +41,65 @@ def comprar():
     return redirect(url_for("peliculas.cartelera"))
 
 
+@tiquetes_bp.route("/mis-tiquetes")
+def mis_tiquetes():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("auth.login"))
+
+    cur = mysql.connection.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT t.id, t.codigo, t.fecha_compra, t.estado, t.estado_pago, t.total,
+               t.subtotal_boletas, t.subtotal_comida, t.metodo_pago,
+               f.fecha, f.hora, f.sala, f.formato,
+               p.titulo, p.imagen_url,
+               s.nombre AS sede_nombre, c.nombre AS ciudad_nombre
+        FROM tiquetes t
+        JOIN funciones f ON f.id = t.funcion_id
+        JOIN peliculas p ON p.id = f.pelicula_id
+        JOIN sedes s ON s.id = f.sede_id
+        JOIN ciudades c ON c.id = s.ciudad_id
+        WHERE t.usuario_id = %s
+        ORDER BY t.fecha_compra DESC
+        """,
+        (user_id,),
+    )
+    tickets = cur.fetchall()
+
+    ticket_ids = [ticket["id"] for ticket in tickets]
+    seats_by_ticket = {}
+    if ticket_ids:
+        placeholders = ",".join(["%s"] * len(ticket_ids))
+        cur.execute(
+            f"""
+            SELECT dt.tiquete_id, a.fila, a.columna
+            FROM detalle_tiquete dt
+            JOIN asientos a ON a.id = dt.asiento_id
+            WHERE dt.tiquete_id IN ({placeholders})
+            ORDER BY a.fila, a.columna
+            """,
+            ticket_ids,
+        )
+        for row in cur.fetchall():
+            seats_by_ticket.setdefault(row["tiquete_id"], []).append(f"{row['fila']}{row['columna']}")
+
+    cur.close()
+
+    for ticket in tickets:
+        if ticket.get("fecha_compra"):
+            ticket["fecha_compra_text"] = ticket["fecha_compra"].strftime("%d/%m/%Y %H:%M")
+        else:
+            ticket["fecha_compra_text"] = ""
+        ticket["fecha_funcion_text"] = str(ticket["fecha"]) if ticket.get("fecha") else ""
+        ticket["hora_funcion_text"] = str(ticket["hora"])[:5] if ticket.get("hora") else ""
+        ticket["asientos"] = seats_by_ticket.get(ticket["id"], [])
+        ticket["confirmacion_estado"] = "Confirmado" if ticket.get("estado_pago") == "aprobado" else "No confirmado"
+        ticket["can_cancel"] = ticket.get("estado") not in {"cancelado", "usado"}
+
+    return render_template("ticket_history.html", tickets=tickets)
+
+
 @tiquetes_bp.route("/api/tiquetes", methods=["POST"])
 def api_crear_tiquete():
     user_id = session.get("user_id")

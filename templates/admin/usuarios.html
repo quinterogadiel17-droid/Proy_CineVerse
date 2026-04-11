@@ -13,7 +13,10 @@
   <span class="chip"><span>{{ stats.total_usuarios or 0 }}</span> usuarios totales</span>
   <span class="chip"><span>{{ stats.total_clientes or 0 }}</span> clientes</span>
   <span class="chip"><span>{{ stats.total_bloqueados or 0 }}</span> bloqueados</span>
+  <span class="chip"><span>{{ stats.total_no_verificados or 0 }}</span> no verificados</span>
 </div>
+
+<div id="userFeedback" class="inline-success" style="display:none; margin-bottom:1rem"></div>
 
 <form method="GET" class="admin-filter-bar">
   <div class="form-group">
@@ -68,14 +71,14 @@
               <input type="checkbox" class="user-check" value="{{ user.id }}" onchange="updateBulkSelectionCount()">
             {% endif %}
           </td>
-          <td>{{ user.nombre }}</td>
-          <td>{{ user.email }}</td>
+          <td class="user-name">{{ user.nombre }}</td>
+          <td class="user-email">{{ user.email }}</td>
           <td>
             {{ user.rol }}
             {% if user.rol == 'admin' %}<span class="admin-badge" style="margin-left:.4rem">ADMIN</span>{% endif %}
           </td>
-          <td>{{ 'Si' if user.verificado else 'No' }}</td>
-          <td id="status-{{ user.id }}">{{ 'Activo' if user.activo else 'Bloqueado' }}</td>
+          <td class="user-verified">{{ 'Si' if user.verificado else 'No' }}</td>
+          <td class="user-active">{{ 'Activo' if user.activo else 'Bloqueado' }}</td>
           <td>
             {% if user.reservas_activas %}
               <span class="chip active">{{ user.reservas_activas }} reservas</span>
@@ -88,6 +91,17 @@
           <td>
             {% if user.rol != 'admin' %}
               <div class="inline-actions">
+                <button class="btn btn-secondary btn-sm" onclick="editUser({{ user.id }}, {{ user.nombre|tojson }}, {{ user.email|tojson }}, {{ 'true' if user.activo else 'false' }}, {{ 'true' if user.verificado else 'false' }})">
+                  Editar
+                </button>
+                {% if not user.verificado %}
+                  <button class="btn btn-secondary btn-sm" onclick="verifyUser({{ user.id }}, {{ user.nombre|tojson }})">
+                    Verificar
+                  </button>
+                  <button class="btn btn-secondary btn-sm" onclick="resendVerification({{ user.id }}, {{ user.nombre|tojson }})">
+                    Reenviar
+                  </button>
+                {% endif %}
                 <button class="btn btn-secondary btn-sm" onclick="toggleUser({{ user.id }}, {{ 'true' if user.activo else 'false' }}, {{ user.nombre|tojson }})">
                   {{ 'Bloquear' if user.activo else 'Reactivar' }}
                 </button>
@@ -111,6 +125,13 @@
 {% block scripts %}
 {{ super() }}
 <script>
+function showUserFeedback(message, isError = false) {
+  const box = document.getElementById('userFeedback');
+  box.className = isError ? 'inline-error' : 'inline-success';
+  box.textContent = message;
+  box.style.display = 'block';
+}
+
 function selectedUserIds() {
   return Array.from(document.querySelectorAll('.user-check:checked')).map(input => Number(input.value));
 }
@@ -129,28 +150,87 @@ function toggleAllUsers(checked) {
 
 async function toggleUser(userId, isActive, userName) {
   const actionLabel = isActive ? 'bloquear' : 'reactivar';
-  if (!confirm(`¿Deseas ${actionLabel} a ${userName}?`)) return;
+  if (!confirm(`Deseas ${actionLabel} a ${userName}?`)) return;
 
   const res = await fetch(`/admin/api/usuarios/${userId}/estado`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) {
-    alert(data.error || 'No se pudo actualizar el usuario.');
+    showUserFeedback(data.error || 'No se pudo actualizar el usuario.', true);
     return;
   }
-  location.reload();
+  document.querySelector(`#user-${userId} .user-active`).textContent = data.activo ? 'Activo' : 'Bloqueado';
+  showUserFeedback(data.mensaje || 'Estado actualizado.');
+  setTimeout(() => window.location.reload(), 400);
 }
 
 async function deleteUser(userId, userName) {
-  const confirmed = confirm(`Eliminar a ${userName} cancelara sus reservas activas y liberara sus asientos. ¿Deseas continuar?`);
+  const confirmed = confirm(`Eliminar a ${userName} cancelara sus reservas activas y liberara sus asientos. Deseas continuar?`);
   if (!confirmed) return;
 
   const res = await fetch(`/admin/api/usuarios/${userId}`, { method: 'DELETE' });
   const data = await res.json();
   if (!res.ok) {
-    alert(data.error || 'No se pudo eliminar el usuario.');
+    showUserFeedback(data.error || 'No se pudo eliminar el usuario.', true);
     return;
   }
-  location.reload();
+  document.getElementById(`user-${userId}`)?.remove();
+  showUserFeedback(data.mensaje || 'Usuario eliminado.');
+  updateBulkSelectionCount();
+}
+
+async function verifyUser(userId, userName) {
+  if (!confirm(`Verificar manualmente a ${userName}?`)) return;
+
+  const res = await fetch(`/admin/api/usuarios/${userId}/verificar`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) {
+    showUserFeedback(data.error || 'No se pudo verificar el usuario.', true);
+    return;
+  }
+  document.querySelector(`#user-${userId} .user-verified`).textContent = 'Si';
+  showUserFeedback(data.mensaje || 'Usuario verificado.');
+  setTimeout(() => window.location.reload(), 400);
+}
+
+async function resendVerification(userId, userName) {
+  if (!confirm(`Reenviar verificacion a ${userName}?`)) return;
+
+  const res = await fetch(`/admin/api/usuarios/${userId}/reenviar-verificacion`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) {
+    showUserFeedback(data.error || 'No se pudo reenviar la verificacion.', true);
+    return;
+  }
+  showUserFeedback(data.mensaje || 'Verificacion encolada.');
+}
+
+async function editUser(userId, currentName, currentEmail, currentActive, currentVerified) {
+  const nombre = prompt('Nombre del usuario:', currentName);
+  if (nombre === null) return;
+
+  const email = prompt('Correo del usuario:', currentEmail);
+  if (email === null) return;
+
+  const activo = confirm(`Aceptar para dejar activo a ${nombre}.\nCancelar para dejarlo bloqueado.`);
+  const verificado = confirm(`Aceptar para dejar verificado a ${nombre}.\nCancelar para dejarlo sin verificar.`);
+
+  const res = await fetch(`/admin/api/usuarios/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre, email, activo, verificado })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    showUserFeedback(data.error || 'No se pudo actualizar el usuario.', true);
+    return;
+  }
+
+  document.querySelector(`#user-${userId} .user-name`).textContent = data.usuario.nombre;
+  document.querySelector(`#user-${userId} .user-email`).textContent = data.usuario.email;
+  document.querySelector(`#user-${userId} .user-verified`).textContent = data.usuario.verificado ? 'Si' : 'No';
+  document.querySelector(`#user-${userId} .user-active`).textContent = data.usuario.activo ? 'Activo' : 'Bloqueado';
+  showUserFeedback(data.mensaje || 'Usuario actualizado.');
+  setTimeout(() => window.location.reload(), 400);
 }
 
 async function applyBulkAction() {
@@ -158,18 +238,18 @@ async function applyBulkAction() {
   const userIds = selectedUserIds();
 
   if (!action) {
-    alert('Selecciona una accion masiva.');
+    showUserFeedback('Selecciona una accion masiva.', true);
     return;
   }
 
   if (!userIds.length) {
-    alert('Selecciona al menos un usuario.');
+    showUserFeedback('Selecciona al menos un usuario.', true);
     return;
   }
 
   const actionText = action === 'delete'
-    ? 'Eliminar los usuarios seleccionados cancelara sus reservas activas y liberara sus asientos. ¿Deseas continuar?'
-    : 'Bloquear los usuarios seleccionados impedira nuevos accesos. ¿Deseas continuar?';
+    ? 'Eliminar los usuarios seleccionados cancelara sus reservas activas y liberara sus asientos. Deseas continuar?'
+    : 'Bloquear los usuarios seleccionados impedira nuevos accesos. Deseas continuar?';
 
   if (!confirm(actionText)) return;
 
@@ -180,10 +260,11 @@ async function applyBulkAction() {
   });
   const data = await res.json();
   if (!res.ok) {
-    alert(data.error || 'No se pudo completar la accion masiva.');
+    showUserFeedback(data.error || 'No se pudo completar la accion masiva.', true);
     return;
   }
-  location.reload();
+  showUserFeedback(data.mensaje || 'Accion completada.');
+  setTimeout(() => window.location.reload(), 400);
 }
 
 updateBulkSelectionCount();

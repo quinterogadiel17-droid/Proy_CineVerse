@@ -54,6 +54,9 @@
 
       <div class="nav-links">
         <a href="{{ url_for('peliculas.cartelera') }}" class="nav-link {% if request.endpoint == 'peliculas.cartelera' %}active{% endif %}">Cartelera</a>
+        {% if session.get('user_id') and session.get('user_rol') == 'cliente' %}
+          <a href="{{ url_for('tiquetes.mis_tiquetes') }}" class="nav-link {% if request.endpoint == 'tiquetes.mis_tiquetes' %}active{% endif %}">Mis tiquetes</a>
+        {% endif %}
         <a href="{{ url_for('tiquetes.validar_page') }}" class="nav-link {% if request.endpoint == 'tiquetes.validar_page' %}active{% endif %}">Validar QR</a>
         {% if session.get('user_rol') == 'admin' %}
           <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}">Admin</a>
