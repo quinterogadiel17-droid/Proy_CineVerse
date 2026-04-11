@@ -40,8 +40,8 @@ def build_auth_notice(title, message, email=None, action_url=None, error_detail=
 def queue_confirmation_email(user_name, email):
     token = generate_email_token(email)
     confirm_url = url_for("auth.confirm_account", token=token, _external=True)
-    queued, error = send_confirmation_email_async(user_name, email, confirm_url)
-    return queued, error, confirm_url
+    status, error = send_confirmation_email_async(user_name, email, confirm_url)
+    return status, error, confirm_url
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -153,12 +153,13 @@ def registro():
 
         cur.close()
 
-        queued, error, confirm_url = queue_confirmation_email(nombre, email)
-        message = (
-            "Te enviamos un correo de confirmacion. Revisa tu bandeja principal, spam o promociones para activar tu cuenta."
-            if queued
-            else "La cuenta quedo creada en estado pendiente, pero el correo no pudo salir ahora mismo. Puedes reintentarlo desde la opcion de reenvio."
-        )
+        mail_status, error, confirm_url = queue_confirmation_email(nombre, email)
+        if mail_status == "sent":
+            message = "Te enviamos un correo de confirmacion. Revisa tu bandeja principal, spam o promociones para activar tu cuenta."
+        elif mail_status == "queued":
+            message = "Estamos procesando el envio del correo de confirmacion. Si no lo ves en unos minutos, revisa spam o usa la opcion de reenvio."
+        else:
+            message = "La cuenta quedo creada en estado pendiente, pero el correo no pudo salir ahora mismo. Puedes reintentarlo desde la opcion de reenvio."
 
         return build_auth_notice(
             title="Confirma tu cuenta",
@@ -166,7 +167,7 @@ def registro():
             email=email,
             action_url=url_for("auth.reenviar_confirmacion", email=email),
             error_detail=error,
-            confirmation_url=confirm_url if not queued and is_local_environment() else None,
+            confirmation_url=confirm_url if mail_status == "failed" and is_local_environment() else None,
         )
 
     return render_template("registro.html")
@@ -243,19 +244,20 @@ def reenviar_confirmacion():
             flash("No fue posible reenviar el correo en este momento.", "error")
             return render_template("auth_resend.html", prefilled_email=email, prefilled_new_email=new_email)
 
-        queued, error, confirm_url = queue_confirmation_email(user["nombre"], target_email)
-        message = (
-            "Reenviamos el correo de confirmacion. Revisa tu bandeja principal, spam o promociones."
-            if queued
-            else "No pudimos enviar el correo en este momento, pero puedes intentarlo de nuevo mas tarde."
-        )
+        mail_status, error, confirm_url = queue_confirmation_email(user["nombre"], target_email)
+        if mail_status == "sent":
+            message = "Reenviamos el correo de confirmacion. Revisa tu bandeja principal, spam o promociones."
+        elif mail_status == "queued":
+            message = "Estamos procesando el reenvio del correo. Si no lo ves en unos minutos, revisa spam o vuelve a intentarlo."
+        else:
+            message = "No pudimos enviar el correo en este momento, pero puedes intentarlo de nuevo mas tarde."
         return build_auth_notice(
             title="Reenvio de confirmacion",
             message=message,
             email=target_email,
             action_url=url_for("auth.reenviar_confirmacion", email=target_email),
             error_detail=error,
-            confirmation_url=confirm_url if not queued and is_local_environment() else None,
+            confirmation_url=confirm_url if mail_status == "failed" and is_local_environment() else None,
         )
 
     return render_template("auth_resend.html", prefilled_email=prefilled_email, prefilled_new_email="")

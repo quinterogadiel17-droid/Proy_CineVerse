@@ -191,14 +191,17 @@ def api_crear_tiquete():
 
         try:
             ticket_url = url_for("tiquetes.ver_tiquete", codigo=ticket_code, _external=True)
-            email_sent, email_error = send_ticket_email_async(
+            mail_status, email_error = send_ticket_email_async(
                 user_info["nombre"],
                 user_info["email"],
                 ticket_url,
                 ticket_code,
                 qr_png,
             )
-            if email_sent:
+            email_sent = mail_status in {"sent", "queued"}
+            if mail_status == "sent":
+                email_message = "Te enviamos el tiquete por correo. Si no lo ves, revisa la carpeta de spam."
+            elif mail_status == "queued":
                 email_message = "Te enviaremos el tiquete por correo. Si no lo ves, revisa la carpeta de spam."
             else:
                 email_message = "La compra fue exitosa, pero el correo no se pudo enviar en este momento."

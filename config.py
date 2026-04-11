@@ -50,5 +50,7 @@ class Config:
     MAIL_DEBUG    = env_bool("MAIL_DEBUG", False)
     MAIL_MAX_RETRIES = int(os.getenv("MAIL_MAX_RETRIES", "2"))
     MAIL_RETRY_DELAY_SECONDS = float(os.getenv("MAIL_RETRY_DELAY_SECONDS", "1.5"))
+    MAIL_TIMEOUT_SECONDS = int(os.getenv("MAIL_TIMEOUT_SECONDS", "15"))
+    MAIL_ASYNC_WAIT_TIMEOUT = float(os.getenv("MAIL_ASYNC_WAIT_TIMEOUT", "2.5"))
 
     QR_SCAN_INTERVAL_MS = int(os.getenv("QR_SCAN_INTERVAL_MS", "1200"))

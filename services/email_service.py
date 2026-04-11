@@ -1,7 +1,8 @@
 import logging
 import smtplib
+import socket
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from email.message import EmailMessage
 from typing import Iterable, Optional
 
@@ -47,8 +48,10 @@ def confirm_password_reset_token(token, max_age=None):
 def _build_message(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = Config.MAIL_FROM
+    message["From"] = Config.MAIL_FROM or Config.MAIL_USERNAME
     message["To"] = recipient
+    message["Reply-To"] = Config.MAIL_USERNAME
+    message["X-Auto-Response-Suppress"] = "All"
     message.set_content(text_body)
 
     if html_body:
@@ -65,27 +68,91 @@ def _build_message(subject, recipient, text_body, html_body=None, attachments: O
     return message
 
 
+def _smtp_attempt_configs():
+    configs = [
+        {
+            "label": "configured",
+            "port": Config.MAIL_PORT,
+            "use_ssl": Config.MAIL_USE_SSL,
+            "use_tls": Config.MAIL_USE_TLS,
+        }
+    ]
+
+    if Config.MAIL_SERVER.lower() == "smtp.gmail.com":
+        gmail_candidates = [
+            {"label": "gmail-ssl", "port": 465, "use_ssl": True, "use_tls": False},
+            {"label": "gmail-starttls", "port": 587, "use_ssl": False, "use_tls": True},
+        ]
+        for candidate in gmail_candidates:
+            duplicate = any(
+                current["port"] == candidate["port"]
+                and current["use_ssl"] == candidate["use_ssl"]
+                and current["use_tls"] == candidate["use_tls"]
+                for current in configs
+            )
+            if not duplicate:
+                configs.append(candidate)
+
+    return configs
+
+
+def _send_email_once(message, recipient, smtp_config):
+    smtp_client = smtplib.SMTP_SSL if smtp_config["use_ssl"] else smtplib.SMTP
+
+    with smtp_client(
+        Config.MAIL_SERVER,
+        smtp_config["port"],
+        timeout=Config.MAIL_TIMEOUT_SECONDS,
+    ) as server:
+        if Config.MAIL_DEBUG:
+            server.set_debuglevel(1)
+        server.ehlo()
+        if smtp_config["use_tls"] and not smtp_config["use_ssl"]:
+            server.starttls()
+            server.ehlo()
+        server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+        server.send_message(
+            message,
+            from_addr=Config.MAIL_USERNAME,
+            to_addrs=[recipient],
+        )
+
+
 def send_email(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
     if not is_mail_configured():
         return False, "SMTP no configurado"
 
     message = _build_message(subject, recipient, text_body, html_body, attachments)
-    smtp_client = smtplib.SMTP_SSL if Config.MAIL_USE_SSL else smtplib.SMTP
+    last_error = None
 
-    try:
-        with smtp_client(Config.MAIL_SERVER, Config.MAIL_PORT, timeout=20) as server:
-            if Config.MAIL_DEBUG:
-                server.set_debuglevel(1)
-            server.ehlo()
-            if Config.MAIL_USE_TLS and not Config.MAIL_USE_SSL:
-                server.starttls()
-                server.ehlo()
-            server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
-            server.send_message(message)
-        return True, None
-    except Exception as exc:
-        logger.warning("Fallo enviando correo a %s: %s", recipient, exc)
-        return False, str(exc)
+    for smtp_config in _smtp_attempt_configs():
+        try:
+            _send_email_once(message, recipient, smtp_config)
+            logger.info(
+                "Correo enviado a %s usando %s (%s:%s).",
+                recipient,
+                smtp_config["label"],
+                Config.MAIL_SERVER,
+                smtp_config["port"],
+            )
+            return True, None
+        except smtplib.SMTPAuthenticationError as exc:
+            last_error = (
+                "Autenticacion SMTP rechazada. Verifica MAIL_USERNAME, la App Password de Gmail "
+                "y que la verificacion en dos pasos siga activa."
+            )
+            logger.error("SMTP auth error para %s usando %s: %s", recipient, smtp_config["label"], exc)
+        except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, socket.timeout, TimeoutError) as exc:
+            last_error = f"Timeout o desconexion SMTP usando {smtp_config['label']}: {exc}"
+            logger.warning("SMTP timeout/desconexion para %s usando %s: %s", recipient, smtp_config["label"], exc)
+        except smtplib.SMTPException as exc:
+            last_error = f"Error SMTP usando {smtp_config['label']}: {exc}"
+            logger.warning("SMTP error para %s usando %s: %s", recipient, smtp_config["label"], exc)
+        except Exception as exc:
+            last_error = f"Error inesperado usando {smtp_config['label']}: {exc}"
+            logger.exception("Error inesperado enviando correo a %s con %s", recipient, smtp_config["label"])
+
+    return False, last_error or "No fue posible enviar el correo."
 
 
 def _run_async_email(payload):
@@ -101,19 +168,42 @@ def _run_async_email(payload):
     for attempt in range(1, max_attempts + 1):
         sent, error = send_email(subject, recipient, text_body, html_body, attachments)
         if sent:
-            logger.info("Correo enviado a %s en intento %s.", recipient, attempt)
-            return True
+            return {
+                "ok": True,
+                "error": None,
+                "attempts": attempt,
+            }
         last_error = error
         if attempt < max_attempts:
             time.sleep(Config.MAIL_RETRY_DELAY_SECONDS)
 
-    logger.error("No fue posible enviar correo a %s despues de %s intentos: %s", recipient, max_attempts, last_error)
-    return False
+    logger.error(
+        "No fue posible enviar correo a %s despues de %s intentos: %s",
+        recipient,
+        max_attempts,
+        last_error,
+    )
+    return {
+        "ok": False,
+        "error": last_error or "No fue posible enviar el correo.",
+        "attempts": max_attempts,
+    }
+
+
+def _log_async_result(recipient, future):
+    try:
+        result = future.result()
+        if result["ok"]:
+            logger.info("Entrega SMTP completada para %s tras %s intento(s).", recipient, result["attempts"])
+        else:
+            logger.error("Entrega SMTP fallida para %s: %s", recipient, result["error"])
+    except Exception:
+        logger.exception("Fallo inesperado procesando el resultado del correo a %s", recipient)
 
 
 def send_email_async(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
     if not is_mail_configured():
-        return False, "SMTP no configurado"
+        return "failed", "SMTP no configurado"
 
     payload = {
         "subject": subject,
@@ -124,11 +214,21 @@ def send_email_async(subject, recipient, text_body, html_body=None, attachments:
     }
 
     try:
-        _mail_executor.submit(_run_async_email, payload)
-        return True, None
+        future = _mail_executor.submit(_run_async_email, payload)
+        future.add_done_callback(lambda done: _log_async_result(recipient, done))
     except Exception as exc:
         logger.exception("No se pudo encolar el correo para %s", recipient)
-        return False, str(exc)
+        return "failed", str(exc)
+
+    try:
+        result = future.result(timeout=Config.MAIL_ASYNC_WAIT_TIMEOUT)
+        return ("sent", None) if result["ok"] else ("failed", result["error"])
+    except TimeoutError:
+        logger.info("Correo a %s encolado para entrega en background.", recipient)
+        return "queued", None
+    except Exception as exc:
+        logger.exception("No se pudo procesar el correo a %s", recipient)
+        return "failed", str(exc)
 
 
 def send_confirmation_email(user_name, email, confirm_url):
