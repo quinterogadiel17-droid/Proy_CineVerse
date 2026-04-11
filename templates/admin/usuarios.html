@@ -35,7 +35,7 @@
 
 <div class="bulk-bar">
   <label class="bulk-checkbox">
-    <input type="checkbox" id="selectAllUsers" onchange="toggleAllUsers(this.checked)">
+    <input type="checkbox" id="selectAllUsers">
     Seleccionar visibles
   </label>
   <span id="bulkSelectionCount" class="chip">0 seleccionados</span>
@@ -44,7 +44,7 @@
     <option value="block">Bloquear seleccionados</option>
     <option value="delete">Eliminar seleccionados</option>
   </select>
-  <button type="button" class="btn btn-secondary" onclick="applyBulkAction()">Aplicar</button>
+  <button type="button" class="btn btn-secondary" id="bulkApplyBtn">Aplicar</button>
 </div>
 
 <div class="admin-table-wrap">
@@ -68,7 +68,7 @@
         <tr id="user-{{ user.id }}">
           <td>
             {% if user.rol != 'admin' %}
-              <input type="checkbox" class="user-check" value="{{ user.id }}" onchange="updateBulkSelectionCount()">
+              <input type="checkbox" class="user-check" value="{{ user.id }}">
             {% endif %}
           </td>
           <td class="user-name">{{ user.nombre }}</td>
@@ -91,21 +91,55 @@
           <td>
             {% if user.rol != 'admin' %}
               <div class="inline-actions">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="editUser({{ user.id }}, {{ user.nombre|tojson }}, {{ user.email|tojson }}, {{ 'true' if user.activo else 'false' }}, {{ 'true' if user.verificado else 'false' }})">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm js-user-action"
+                  data-action="edit"
+                  data-user-id="{{ user.id }}"
+                  data-user-name="{{ user.nombre|e }}"
+                  data-user-email="{{ user.email|e }}"
+                  data-user-active="{{ 1 if user.activo else 0 }}"
+                  data-user-verified="{{ 1 if user.verificado else 0 }}"
+                >
                   Editar
                 </button>
                 {% if not user.verificado %}
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="verifyUser({{ user.id }}, {{ user.nombre|tojson }})">
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm js-user-action"
+                    data-action="verify"
+                    data-user-id="{{ user.id }}"
+                    data-user-name="{{ user.nombre|e }}"
+                  >
                     Verificar
                   </button>
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="resendVerification({{ user.id }}, {{ user.nombre|tojson }})">
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm js-user-action"
+                    data-action="resend"
+                    data-user-id="{{ user.id }}"
+                    data-user-name="{{ user.nombre|e }}"
+                  >
                     Reenviar
                   </button>
                 {% endif %}
-                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleUser({{ user.id }}, {{ 'true' if user.activo else 'false' }}, {{ user.nombre|tojson }})">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm js-user-action"
+                  data-action="toggle"
+                  data-user-id="{{ user.id }}"
+                  data-user-name="{{ user.nombre|e }}"
+                  data-user-active="{{ 1 if user.activo else 0 }}"
+                >
                   {{ 'Bloquear' if user.activo else 'Reactivar' }}
                 </button>
-                <button type="button" class="btn btn-danger btn-sm" onclick="deleteUser({{ user.id }}, {{ user.nombre|tojson }})">
+                <button
+                  type="button"
+                  class="btn btn-danger btn-sm js-user-action"
+                  data-action="delete"
+                  data-user-id="{{ user.id }}"
+                  data-user-name="{{ user.nombre|e }}"
+                >
                   Eliminar
                 </button>
               </div>
@@ -271,6 +305,50 @@ async function applyBulkAction() {
   showUserFeedback(data.mensaje || 'Accion completada.');
   setTimeout(() => window.location.reload(), 400);
 }
+
+document.getElementById('selectAllUsers')?.addEventListener('change', event => {
+  toggleAllUsers(event.target.checked);
+});
+
+document.querySelectorAll('.user-check').forEach(input => {
+  input.addEventListener('change', updateBulkSelectionCount);
+});
+
+document.getElementById('bulkApplyBtn')?.addEventListener('click', () => {
+  applyBulkAction();
+});
+
+document.addEventListener('click', event => {
+  const button = event.target.closest('.js-user-action');
+  if (!button) return;
+
+  const action = button.dataset.action;
+  const userId = Number(button.dataset.userId);
+  const userName = button.dataset.userName || 'Usuario';
+  const userEmail = button.dataset.userEmail || '';
+  const isActive = button.dataset.userActive === '1';
+  const isVerified = button.dataset.userVerified === '1';
+
+  if (action === 'edit') {
+    editUser(userId, userName, userEmail, isActive, isVerified);
+    return;
+  }
+  if (action === 'verify') {
+    verifyUser(userId, userName);
+    return;
+  }
+  if (action === 'resend') {
+    resendVerification(userId, userName);
+    return;
+  }
+  if (action === 'toggle') {
+    toggleUser(userId, isActive, userName);
+    return;
+  }
+  if (action === 'delete') {
+    deleteUser(userId, userName);
+  }
+});
 
 updateBulkSelectionCount();
 </script>
