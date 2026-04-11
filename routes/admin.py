@@ -30,10 +30,14 @@ def admin_required(view):
 
 
 def queue_confirmation_email_for_user(user_name, email):
-    token = generate_email_token(email)
-    confirm_url = url_for("auth.confirm_account", token=token, _external=True)
-    status, error = send_confirmation_email_async(user_name, email, confirm_url)
-    return status, error, confirm_url
+    try:
+        token = generate_email_token(email)
+        confirm_url = url_for("auth.confirm_account", token=token, _external=True)
+        status, error = send_confirmation_email_async(user_name, email, confirm_url)
+        return status, error, confirm_url
+    except Exception as exc:
+        current_app.logger.exception("No se pudo preparar o encolar verificacion para %s", email)
+        return "failed", str(exc), None
 
 
 @admin_bp.route("/")

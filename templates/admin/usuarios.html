@@ -91,21 +91,21 @@
           <td>
             {% if user.rol != 'admin' %}
               <div class="inline-actions">
-                <button class="btn btn-secondary btn-sm" onclick="editUser({{ user.id }}, {{ user.nombre|tojson }}, {{ user.email|tojson }}, {{ 'true' if user.activo else 'false' }}, {{ 'true' if user.verificado else 'false' }})">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="editUser({{ user.id }}, {{ user.nombre|tojson }}, {{ user.email|tojson }}, {{ 'true' if user.activo else 'false' }}, {{ 'true' if user.verificado else 'false' }})">
                   Editar
                 </button>
                 {% if not user.verificado %}
-                  <button class="btn btn-secondary btn-sm" onclick="verifyUser({{ user.id }}, {{ user.nombre|tojson }})">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="verifyUser({{ user.id }}, {{ user.nombre|tojson }})">
                     Verificar
                   </button>
-                  <button class="btn btn-secondary btn-sm" onclick="resendVerification({{ user.id }}, {{ user.nombre|tojson }})">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="resendVerification({{ user.id }}, {{ user.nombre|tojson }})">
                     Reenviar
                   </button>
                 {% endif %}
-                <button class="btn btn-secondary btn-sm" onclick="toggleUser({{ user.id }}, {{ 'true' if user.activo else 'false' }}, {{ user.nombre|tojson }})">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleUser({{ user.id }}, {{ 'true' if user.activo else 'false' }}, {{ user.nombre|tojson }})">
                   {{ 'Bloquear' if user.activo else 'Reactivar' }}
                 </button>
-                <button class="btn btn-danger btn-sm" onclick="deleteUser({{ user.id }}, {{ user.nombre|tojson }})">
+                <button type="button" class="btn btn-danger btn-sm" onclick="deleteUser({{ user.id }}, {{ user.nombre|tojson }})">
                   Eliminar
                 </button>
               </div>
@@ -132,6 +132,17 @@ function showUserFeedback(message, isError = false) {
   box.style.display = 'block';
 }
 
+async function requestJson(url, options = {}) {
+  try {
+    const response = await fetch(url, options);
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  } catch (error) {
+    showUserFeedback('No se pudo completar la solicitud. Revisa tu conexion e intenta nuevamente.', true);
+    return { response: { ok: false }, data: { error: 'Error de red.' } };
+  }
+}
+
 function selectedUserIds() {
   return Array.from(document.querySelectorAll('.user-check:checked')).map(input => Number(input.value));
 }
@@ -152,9 +163,8 @@ async function toggleUser(userId, isActive, userName) {
   const actionLabel = isActive ? 'bloquear' : 'reactivar';
   if (!confirm(`Deseas ${actionLabel} a ${userName}?`)) return;
 
-  const res = await fetch(`/admin/api/usuarios/${userId}/estado`, { method: 'POST' });
-  const data = await res.json();
-  if (!res.ok) {
+  const { response, data } = await requestJson(`/admin/api/usuarios/${userId}/estado`, { method: 'POST' });
+  if (!response.ok) {
     showUserFeedback(data.error || 'No se pudo actualizar el usuario.', true);
     return;
   }
@@ -167,9 +177,8 @@ async function deleteUser(userId, userName) {
   const confirmed = confirm(`Eliminar a ${userName} cancelara sus reservas activas y liberara sus asientos. Deseas continuar?`);
   if (!confirmed) return;
 
-  const res = await fetch(`/admin/api/usuarios/${userId}`, { method: 'DELETE' });
-  const data = await res.json();
-  if (!res.ok) {
+  const { response, data } = await requestJson(`/admin/api/usuarios/${userId}`, { method: 'DELETE' });
+  if (!response.ok) {
     showUserFeedback(data.error || 'No se pudo eliminar el usuario.', true);
     return;
   }
@@ -181,9 +190,8 @@ async function deleteUser(userId, userName) {
 async function verifyUser(userId, userName) {
   if (!confirm(`Verificar manualmente a ${userName}?`)) return;
 
-  const res = await fetch(`/admin/api/usuarios/${userId}/verificar`, { method: 'POST' });
-  const data = await res.json();
-  if (!res.ok) {
+  const { response, data } = await requestJson(`/admin/api/usuarios/${userId}/verificar`, { method: 'POST' });
+  if (!response.ok) {
     showUserFeedback(data.error || 'No se pudo verificar el usuario.', true);
     return;
   }
@@ -195,9 +203,8 @@ async function verifyUser(userId, userName) {
 async function resendVerification(userId, userName) {
   if (!confirm(`Reenviar verificacion a ${userName}?`)) return;
 
-  const res = await fetch(`/admin/api/usuarios/${userId}/reenviar-verificacion`, { method: 'POST' });
-  const data = await res.json();
-  if (!res.ok) {
+  const { response, data } = await requestJson(`/admin/api/usuarios/${userId}/reenviar-verificacion`, { method: 'POST' });
+  if (!response.ok) {
     showUserFeedback(data.error || 'No se pudo reenviar la verificacion.', true);
     return;
   }
@@ -214,13 +221,12 @@ async function editUser(userId, currentName, currentEmail, currentActive, curren
   const activo = confirm(`Aceptar para dejar activo a ${nombre}.\nCancelar para dejarlo bloqueado.`);
   const verificado = confirm(`Aceptar para dejar verificado a ${nombre}.\nCancelar para dejarlo sin verificar.`);
 
-  const res = await fetch(`/admin/api/usuarios/${userId}`, {
+  const { response, data } = await requestJson(`/admin/api/usuarios/${userId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nombre, email, activo, verificado })
   });
-  const data = await res.json();
-  if (!res.ok) {
+  if (!response.ok) {
     showUserFeedback(data.error || 'No se pudo actualizar el usuario.', true);
     return;
   }
@@ -253,13 +259,12 @@ async function applyBulkAction() {
 
   if (!confirm(actionText)) return;
 
-  const res = await fetch('/admin/api/usuarios/acciones-masivas', {
+  const { response, data } = await requestJson('/admin/api/usuarios/acciones-masivas', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, user_ids: userIds })
   });
-  const data = await res.json();
-  if (!res.ok) {
+  if (!response.ok) {
     showUserFeedback(data.error || 'No se pudo completar la accion masiva.', true);
     return;
   }

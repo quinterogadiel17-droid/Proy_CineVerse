@@ -38,10 +38,25 @@ def build_auth_notice(title, message, email=None, action_url=None, error_detail=
 
 
 def queue_confirmation_email(user_name, email):
-    token = generate_email_token(email)
-    confirm_url = url_for("auth.confirm_account", token=token, _external=True)
-    status, error = send_confirmation_email_async(user_name, email, confirm_url)
-    return status, error, confirm_url
+    try:
+        token = generate_email_token(email)
+        confirm_url = url_for("auth.confirm_account", token=token, _external=True)
+        status, error = send_confirmation_email_async(user_name, email, confirm_url)
+        return status, error, confirm_url
+    except Exception as exc:
+        current_app.logger.exception("No se pudo preparar o encolar el correo de confirmacion para %s", email)
+        return "failed", str(exc), None
+
+
+def queue_password_reset_email(user_name, email):
+    try:
+        token = generate_password_reset_token(email)
+        reset_url = url_for("auth.reset_password", token=token, _external=True)
+        status, error = send_password_reset_email_async(user_name, email, reset_url)
+        return status, error, reset_url
+    except Exception as exc:
+        current_app.logger.exception("No se pudo preparar o encolar el correo de recuperacion para %s", email)
+        return "failed", str(exc), None
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -305,9 +320,7 @@ def forgot_password():
         cur.close()
 
         if user and user.get("activo", 1):
-            token = generate_password_reset_token(user["email"])
-            reset_url = url_for("auth.reset_password", token=token, _external=True)
-            send_password_reset_email_async(user["nombre"], user["email"], reset_url)
+            queue_password_reset_email(user["nombre"], user["email"])
 
         return build_auth_notice(
             title="Revisa tu correo",
