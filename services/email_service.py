@@ -47,13 +47,13 @@ def _mask_secret(value):
 
 def get_mail_configuration_status():
     settings = _get_mail_settings()
+    effective_from = settings["from_email"] or settings["username"]
     missing = [
         key
         for key, value in {
             "MAIL_SERVER": settings["server"],
             "MAIL_USERNAME": settings["username"],
             "MAIL_PASSWORD": settings["password"],
-            "MAIL_FROM": settings["from_email"],
         }.items()
         if not value
     ]
@@ -65,7 +65,8 @@ def get_mail_configuration_status():
         "use_tls": settings["use_tls"],
         "use_ssl": settings["use_ssl"],
         "username_masked": _mask_secret(settings["username"]),
-        "from_email": settings["from_email"] or "(empty)",
+        "from_email": effective_from or "(empty)",
+        "from_source": "MAIL_FROM" if settings["from_email"] else "MAIL_USERNAME",
     }
     return status
 
@@ -201,7 +202,6 @@ def _send_email_with_settings(subject, recipient, text_body, html_body=None, att
                 mail_settings["server"],
                 mail_settings["username"],
                 mail_settings["password"],
-                mail_settings["from_email"],
             ]
         ),
         "missing": [
@@ -210,7 +210,6 @@ def _send_email_with_settings(subject, recipient, text_body, html_body=None, att
                 "MAIL_SERVER": mail_settings["server"],
                 "MAIL_USERNAME": mail_settings["username"],
                 "MAIL_PASSWORD": mail_settings["password"],
-                "MAIL_FROM": mail_settings["from_email"],
             }.items()
             if not value
         ],

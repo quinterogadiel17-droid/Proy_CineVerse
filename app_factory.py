@@ -14,7 +14,7 @@ from catalog import (
 )
 from config import Config
 from extensions import mysql
-from services.email_service import log_mail_configuration
+from services.email_service import get_mail_configuration_status, log_mail_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +236,23 @@ def _register_routes(app):
     @app.get("/healthz")
     def healthz():
         return jsonify({"status": "ok"}), 200
+
+    @app.get("/healthz/mail")
+    def healthz_mail():
+        status = get_mail_configuration_status()
+        payload = {
+            "configured": status["configured"],
+            "server": status["server"],
+            "port": status["port"],
+            "use_tls": status["use_tls"],
+            "use_ssl": status["use_ssl"],
+            "username": status["username_masked"],
+            "from_email": status["from_email"],
+            "from_source": status["from_source"],
+            "missing": status["missing"],
+        }
+        http_status = 200 if status["configured"] else 503
+        return jsonify(payload), http_status
 
     @app.route("/seleccionar-ubicacion", methods=["GET"])
     def choose_location():
