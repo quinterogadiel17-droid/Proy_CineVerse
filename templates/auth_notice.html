@@ -8,15 +8,28 @@
     <h1 class="auth-title">{{ title }}</h1>
     <p class="auth-sub">{{ message }}</p>
 
+    {% if email %}
+      <p class="auth-sub" style="margin-top:-.5rem">Correo asociado: <strong>{{ email }}</strong></p>
+    {% endif %}
+
     {% if confirmation_url %}
       <div class="inline-error" style="margin-bottom:1rem">
         {% if error_detail %}<div style="margin-bottom:.4rem">{{ error_detail }}</div>{% endif %}
         Enlace temporal de desarrollo:
         <a href="{{ confirmation_url }}">{{ confirmation_url }}</a>
       </div>
+    {% elif error_detail %}
+      <div class="inline-error" style="margin-bottom:1rem">
+        {{ error_detail }}
+      </div>
     {% endif %}
 
-    <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Ir a iniciar sesion</a>
+    <div style="display:flex; gap:.75rem; flex-wrap:wrap; justify-content:center;">
+      {% if action_url %}
+        <a href="{{ action_url }}" class="btn btn-secondary">Intentar de nuevo</a>
+      {% endif %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Ir a iniciar sesion</a>
+    </div>
   </div>
 </div>
 {% endblock %}

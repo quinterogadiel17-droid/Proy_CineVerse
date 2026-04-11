@@ -20,6 +20,11 @@
       <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.5rem">Entrar</button>
     </form>
 
+    <div class="auth-footer" style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+      <a href="{{ url_for('auth.forgot_password') }}">Olvidaste tu contrasena?</a>
+      <a href="{{ url_for('auth.reenviar_confirmacion') }}">Reenviar confirmacion</a>
+    </div>
+
     <p class="auth-footer">No tienes cuenta? <a href="{{ url_for('auth.registro') }}">Registrate</a></p>
   </div>
 </div>

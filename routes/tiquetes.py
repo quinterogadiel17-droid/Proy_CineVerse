@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import logging
 import uuid
 
 import qrcode
@@ -8,7 +9,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, sessio
 
 from catalog import SNACK_COMBOS
 from extensions import mysql
-from services.email_service import send_ticket_email
+from services.email_service import send_ticket_email_async
 from services.payment_service import validate_payment
 from services.reservation_service import (
     ReservationConflictError,
@@ -18,6 +19,7 @@ from services.reservation_service import (
 
 tiquetes_bp = Blueprint("tiquetes", __name__)
 COMBOS_BY_ID = {combo["id"]: combo for combo in SNACK_COMBOS}
+logger = logging.getLogger(__name__)
 
 
 def generate_qr_png(ticket_code):
@@ -182,32 +184,32 @@ def api_crear_tiquete():
         # 1. Primero aseguramos la compra en la base de datos
         mysql.connection.commit()
 
-        # 2. Intentamos enviar el correo de forma segura
+        # 2. Intentamos encolar el correo sin bloquear la respuesta
         email_sent = False
         email_error = None
-        
-        try:
-            # Generamos la URL del tiquete para el botón del correo
-            ticket_url = url_for("tiquetes.ver_tiquete", codigo=ticket_code, _external=True)
+        email_message = "La compra fue exitosa."
 
-            # Llamamos al servicio de email
-            email_sent, email_error = send_ticket_email(
+        try:
+            ticket_url = url_for("tiquetes.ver_tiquete", codigo=ticket_code, _external=True)
+            email_sent, email_error = send_ticket_email_async(
                 user_info["nombre"],
                 user_info["email"],
                 ticket_url,
                 ticket_code,
                 qr_png,
             )
+            if email_sent:
+                email_message = "Te enviaremos el tiquete por correo. Si no lo ves, revisa la carpeta de spam."
+            else:
+                email_message = "La compra fue exitosa, pero el correo no se pudo enviar en este momento."
         except Exception as e:
-            # Si falla (por ejemplo, en local sin internet), guardamos el error en el log
-            # pero permitimos que la función termine con éxito para el usuario
             email_sent = False
             email_error = f"Error SMTP: {str(e)}"
-            print(f"DEBUG: No se envió el email, pero la compra fue exitosa. Motivo: {e}")
+            email_message = "La compra fue exitosa, pero el correo no se pudo enviar en este momento."
+            logger.warning("No se pudo encolar el email del tiquete %s: %s", ticket_code, e)
 
         cur.close()
 
-        # 3. Devolvemos la respuesta al navegador
         return jsonify(
             {
                 "tiquete_id": ticket_id,
@@ -217,18 +219,19 @@ def api_crear_tiquete():
                 "estado_pago": "aprobado",
                 "pago_simulado": bool(payment_info.get("simulation", True)),
                 "qr": qr_base64,
-                "email_sent": email_sent, # Dirá True si se envió, False si no
+                "email_sent": email_sent,
                 "email_error": email_error,
+                "email_message": email_message,
             }
         ), 201
 
     except Exception as exc:
         if mysql.connection:
             mysql.connection.rollback()
-        print(f"--- ERROR CRÍTICO ---: {str(exc)}") # Esto sale en tu terminal de VS Code
+        logger.exception("Error critico creando tiquete")
         return jsonify({
-            "error": "Error técnico detectado",
-            "detalle": str(exc), # <--- Esto te dirá qué columna o dato falla
+            "error": "Error tecnico detectado",
+            "detalle": str(exc),
             "tipo": type(exc).__name__
         }), 500
 

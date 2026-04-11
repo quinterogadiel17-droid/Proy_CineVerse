@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Error interno{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <span class="eyebrow">Ups</span>
+    <h1 class="auth-title">Algo salio mal</h1>
+    <p class="auth-sub">El servidor encontro un problema inesperado. Puedes recargar en unos segundos o volver a la cartelera.</p>
+    <div style="display:flex; gap:.75rem; justify-content:center; flex-wrap:wrap;">
+      <a href="{{ url_for('peliculas.cartelera') }}" class="btn btn-primary">Volver a cartelera</a>
+      <a href="{{ url_for('healthz') }}" class="btn btn-secondary">Verificar estado</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

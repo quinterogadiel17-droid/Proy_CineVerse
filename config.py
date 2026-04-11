@@ -18,6 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "cinecol-secret-2024-adso18")
+    ENVIRONMENT = os.getenv("FLASK_ENV", "production")
 
     MYSQL_HOST     = os.getenv("DB_HOST",     "localhost")
     MYSQL_USER     = os.getenv("DB_USER",     "root")
@@ -36,6 +37,8 @@ class Config:
 
     APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5000")
     EMAIL_TOKEN_SALT = os.getenv("EMAIL_TOKEN_SALT", "cinecol-email-confirmation")
+    PASSWORD_RESET_TOKEN_SALT = os.getenv("PASSWORD_RESET_TOKEN_SALT", "cinecol-password-reset")
+    PASSWORD_RESET_MAX_AGE_SECONDS = int(os.getenv("PASSWORD_RESET_MAX_AGE_SECONDS", "3600"))
 
     MAIL_SERVER   = os.getenv("MAIL_SERVER", "")
     MAIL_PORT     = int(os.getenv("MAIL_PORT", "587"))
@@ -45,5 +48,7 @@ class Config:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM     = os.getenv("MAIL_FROM", "no-reply@cinecol.com")
     MAIL_DEBUG    = env_bool("MAIL_DEBUG", False)
+    MAIL_MAX_RETRIES = int(os.getenv("MAIL_MAX_RETRIES", "2"))
+    MAIL_RETRY_DELAY_SECONDS = float(os.getenv("MAIL_RETRY_DELAY_SECONDS", "1.5"))
 
     QR_SCAN_INTERVAL_MS = int(os.getenv("QR_SCAN_INTERVAL_MS", "1200"))

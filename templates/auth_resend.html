@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Reenviar confirmacion{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <span class="eyebrow">Cuenta pendiente</span>
+    <h1 class="auth-title">Reenviar confirmacion</h1>
+    <p class="auth-sub">Te enviaremos un nuevo enlace de verificacion. Si lo deseas, tambien puedes corregir el correo antes de confirmar.</p>
+
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Correo registrado</label>
+        <input type="email" name="email" class="form-input" value="{{ prefilled_email }}" placeholder="tu@email.com" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nuevo correo (opcional)</label>
+        <input type="email" name="new_email" class="form-input" value="{{ prefilled_new_email }}" placeholder="solo si deseas cambiarlo">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%; margin-top:.5rem">Reenviar correo</button>
+    </form>
+
+    <p class="auth-footer">Tip: revisa tambien tu carpeta de spam o promociones.</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,4 +1,4 @@
-from app import bootstrap_database
+from services.bootstrap_service import bootstrap_database
 
 
 if __name__ == "__main__":
