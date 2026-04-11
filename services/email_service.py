@@ -2,10 +2,11 @@ import logging
 import smtplib
 import socket
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 from typing import Iterable, Optional
 
+from flask import current_app, has_app_context
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from config import Config
@@ -14,43 +15,116 @@ logger = logging.getLogger(__name__)
 _mail_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mail-worker")
 
 
+def _get_config_value(name):
+    if has_app_context():
+        return current_app.config.get(name, getattr(Config, name, None))
+    return getattr(Config, name, None)
+
+
+def _get_mail_settings():
+    return {
+        "server": (_get_config_value("MAIL_SERVER") or "").strip(),
+        "port": int(_get_config_value("MAIL_PORT") or 587),
+        "use_tls": bool(_get_config_value("MAIL_USE_TLS")),
+        "use_ssl": bool(_get_config_value("MAIL_USE_SSL")),
+        "username": (_get_config_value("MAIL_USERNAME") or "").strip(),
+        "password": (_get_config_value("MAIL_PASSWORD") or "").strip(),
+        "from_email": (_get_config_value("MAIL_FROM") or "").strip(),
+        "debug": bool(_get_config_value("MAIL_DEBUG")),
+        "max_retries": int(_get_config_value("MAIL_MAX_RETRIES") or 2),
+        "retry_delay_seconds": float(_get_config_value("MAIL_RETRY_DELAY_SECONDS") or 1.5),
+        "timeout_seconds": int(_get_config_value("MAIL_TIMEOUT_SECONDS") or 15),
+    }
+
+
+def _mask_secret(value):
+    if not value:
+        return "(empty)"
+    if len(value) <= 4:
+        return "*" * len(value)
+    return f"{value[:2]}***{value[-2:]}"
+
+
+def get_mail_configuration_status():
+    settings = _get_mail_settings()
+    missing = [
+        key
+        for key, value in {
+            "MAIL_SERVER": settings["server"],
+            "MAIL_USERNAME": settings["username"],
+            "MAIL_PASSWORD": settings["password"],
+            "MAIL_FROM": settings["from_email"],
+        }.items()
+        if not value
+    ]
+    status = {
+        "configured": not missing,
+        "missing": missing,
+        "server": settings["server"] or "(empty)",
+        "port": settings["port"],
+        "use_tls": settings["use_tls"],
+        "use_ssl": settings["use_ssl"],
+        "username_masked": _mask_secret(settings["username"]),
+        "from_email": settings["from_email"] or "(empty)",
+    }
+    return status
+
+
+def log_mail_configuration(context="runtime"):
+    status = get_mail_configuration_status()
+    logger.info(
+        "MAIL CONFIG [%s]: configured=%s server=%s port=%s tls=%s ssl=%s username=%s from=%s missing=%s",
+        context,
+        status["configured"],
+        status["server"],
+        status["port"],
+        status["use_tls"],
+        status["use_ssl"],
+        status["username_masked"],
+        status["from_email"],
+        ",".join(status["missing"]) if status["missing"] else "none",
+    )
+    return status
+
+
 def _serializer():
-    return URLSafeTimedSerializer(Config.SECRET_KEY)
+    return URLSafeTimedSerializer(_get_config_value("SECRET_KEY"))
 
 
 def is_mail_configured():
-    return all([Config.MAIL_SERVER, Config.MAIL_USERNAME, Config.MAIL_PASSWORD, Config.MAIL_FROM])
+    return get_mail_configuration_status()["configured"]
 
 
 def generate_email_token(email):
-    return _serializer().dumps(email, salt=Config.EMAIL_TOKEN_SALT)
+    return _serializer().dumps(email, salt=_get_config_value("EMAIL_TOKEN_SALT"))
 
 
 def confirm_email_token(token, max_age=60 * 60 * 24):
     try:
-        return _serializer().loads(token, salt=Config.EMAIL_TOKEN_SALT, max_age=max_age)
+        return _serializer().loads(token, salt=_get_config_value("EMAIL_TOKEN_SALT"), max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
 
 
 def generate_password_reset_token(email):
-    return _serializer().dumps(email, salt=Config.PASSWORD_RESET_TOKEN_SALT)
+    return _serializer().dumps(email, salt=_get_config_value("PASSWORD_RESET_TOKEN_SALT"))
 
 
 def confirm_password_reset_token(token, max_age=None):
-    max_age = max_age or Config.PASSWORD_RESET_MAX_AGE_SECONDS
+    max_age = max_age or _get_config_value("PASSWORD_RESET_MAX_AGE_SECONDS")
     try:
-        return _serializer().loads(token, salt=Config.PASSWORD_RESET_TOKEN_SALT, max_age=max_age)
+        return _serializer().loads(token, salt=_get_config_value("PASSWORD_RESET_TOKEN_SALT"), max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
 
 
-def _build_message(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
+def _build_message(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None, mail_settings=None):
+    mail_settings = mail_settings or _get_mail_settings()
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = Config.MAIL_FROM or Config.MAIL_USERNAME
+    message["From"] = mail_settings["from_email"] or mail_settings["username"]
     message["To"] = recipient
-    message["Reply-To"] = Config.MAIL_USERNAME
+    message["Reply-To"] = mail_settings["username"]
     message["X-Auto-Response-Suppress"] = "All"
     message.set_content(text_body)
 
@@ -68,17 +142,18 @@ def _build_message(subject, recipient, text_body, html_body=None, attachments: O
     return message
 
 
-def _smtp_attempt_configs():
+def _smtp_attempt_configs(mail_settings=None):
+    mail_settings = mail_settings or _get_mail_settings()
     configs = [
         {
             "label": "configured",
-            "port": Config.MAIL_PORT,
-            "use_ssl": Config.MAIL_USE_SSL,
-            "use_tls": Config.MAIL_USE_TLS,
+            "port": mail_settings["port"],
+            "use_ssl": mail_settings["use_ssl"],
+            "use_tls": mail_settings["use_tls"],
         }
     ]
 
-    if Config.MAIL_SERVER.lower() == "smtp.gmail.com":
+    if mail_settings["server"].lower() == "smtp.gmail.com":
         gmail_candidates = [
             {"label": "gmail-ssl", "port": 465, "use_ssl": True, "use_tls": False},
             {"label": "gmail-starttls", "port": 587, "use_ssl": False, "use_tls": True},
@@ -96,43 +171,65 @@ def _smtp_attempt_configs():
     return configs
 
 
-def _send_email_once(message, recipient, smtp_config):
+def _send_email_once(message, recipient, smtp_config, mail_settings):
     smtp_client = smtplib.SMTP_SSL if smtp_config["use_ssl"] else smtplib.SMTP
 
     with smtp_client(
-        Config.MAIL_SERVER,
+        mail_settings["server"],
         smtp_config["port"],
-        timeout=Config.MAIL_TIMEOUT_SECONDS,
+        timeout=mail_settings["timeout_seconds"],
     ) as server:
-        if Config.MAIL_DEBUG:
+        if mail_settings["debug"]:
             server.set_debuglevel(1)
         server.ehlo()
         if smtp_config["use_tls"] and not smtp_config["use_ssl"]:
             server.starttls()
             server.ehlo()
-        server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+        server.login(mail_settings["username"], mail_settings["password"])
         server.send_message(
             message,
-            from_addr=Config.MAIL_USERNAME,
+            from_addr=mail_settings["from_email"] or mail_settings["username"],
             to_addrs=[recipient],
         )
 
 
-def send_email(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
-    if not is_mail_configured():
-        return False, "SMTP no configurado"
+def _send_email_with_settings(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None, mail_settings=None):
+    mail_settings = mail_settings or _get_mail_settings()
+    mail_status = {
+        "configured": all(
+            [
+                mail_settings["server"],
+                mail_settings["username"],
+                mail_settings["password"],
+                mail_settings["from_email"],
+            ]
+        ),
+        "missing": [
+            key
+            for key, value in {
+                "MAIL_SERVER": mail_settings["server"],
+                "MAIL_USERNAME": mail_settings["username"],
+                "MAIL_PASSWORD": mail_settings["password"],
+                "MAIL_FROM": mail_settings["from_email"],
+            }.items()
+            if not value
+        ],
+    }
+    if not mail_status["configured"]:
+        logger.warning("SMTP incompleto para %s. Faltan: %s", recipient, ",".join(mail_status["missing"]))
+        return False, f"SMTP no configurado. Faltan: {', '.join(mail_status['missing'])}"
 
-    message = _build_message(subject, recipient, text_body, html_body, attachments)
+    message = _build_message(subject, recipient, text_body, html_body, attachments, mail_settings=mail_settings)
     last_error = None
 
-    for smtp_config in _smtp_attempt_configs():
+    for smtp_config in _smtp_attempt_configs(mail_settings):
         try:
-            _send_email_once(message, recipient, smtp_config)
+            _send_email_once(message, recipient, smtp_config, mail_settings)
             logger.info(
                 "Correo enviado a %s usando %s (%s:%s).",
                 recipient,
                 smtp_config["label"],
-                Config.MAIL_SERVER,
+                mail_settings["server"],
                 smtp_config["port"],
             )
             return True, None
@@ -155,7 +252,12 @@ def send_email(subject, recipient, text_body, html_body=None, attachments: Optio
     return False, last_error or "No fue posible enviar el correo."
 
 
+def send_email(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
+    return _send_email_with_settings(subject, recipient, text_body, html_body, attachments)
+
+
 def _run_async_email(payload):
+    mail_settings = payload["mail_settings"]
     subject = payload["subject"]
     recipient = payload["recipient"]
     text_body = payload["text_body"]
@@ -163,10 +265,17 @@ def _run_async_email(payload):
     attachments = payload.get("attachments")
 
     last_error = None
-    max_attempts = max(Config.MAIL_MAX_RETRIES + 1, 1)
+    max_attempts = max(mail_settings["max_retries"] + 1, 1)
 
     for attempt in range(1, max_attempts + 1):
-        sent, error = send_email(subject, recipient, text_body, html_body, attachments)
+        sent, error = _send_email_with_settings(
+            subject,
+            recipient,
+            text_body,
+            html_body,
+            attachments,
+            mail_settings=mail_settings,
+        )
         if sent:
             return {
                 "ok": True,
@@ -175,7 +284,7 @@ def _run_async_email(payload):
             }
         last_error = error
         if attempt < max_attempts:
-            time.sleep(Config.MAIL_RETRY_DELAY_SECONDS)
+            time.sleep(mail_settings["retry_delay_seconds"])
 
     logger.error(
         "No fue posible enviar correo a %s despues de %s intentos: %s",
@@ -202,8 +311,12 @@ def _log_async_result(recipient, future):
 
 
 def send_email_async(subject, recipient, text_body, html_body=None, attachments: Optional[Iterable[dict]] = None):
-    if not is_mail_configured():
-        return "failed", "SMTP no configurado"
+    mail_status = get_mail_configuration_status()
+    if not mail_status["configured"]:
+        logger.warning("SMTP no disponible al encolar correo para %s. Faltan: %s", recipient, ",".join(mail_status["missing"]))
+        return "failed", f"SMTP no configurado. Faltan: {', '.join(mail_status['missing'])}"
+
+    mail_settings = _get_mail_settings()
 
     payload = {
         "subject": subject,
@@ -211,6 +324,7 @@ def send_email_async(subject, recipient, text_body, html_body=None, attachments:
         "text_body": text_body,
         "html_body": html_body,
         "attachments": list(attachments or []),
+        "mail_settings": mail_settings,
     }
 
     try:
@@ -220,15 +334,8 @@ def send_email_async(subject, recipient, text_body, html_body=None, attachments:
         logger.exception("No se pudo encolar el correo para %s", recipient)
         return "failed", str(exc)
 
-    try:
-        result = future.result(timeout=Config.MAIL_ASYNC_WAIT_TIMEOUT)
-        return ("sent", None) if result["ok"] else ("failed", result["error"])
-    except TimeoutError:
-        logger.info("Correo a %s encolado para entrega en background.", recipient)
-        return "queued", None
-    except Exception as exc:
-        logger.exception("No se pudo procesar el correo a %s", recipient)
-        return "failed", str(exc)
+    logger.info("Correo a %s encolado para entrega en background.", recipient)
+    return "queued", None
 
 
 def send_confirmation_email(user_name, email, confirm_url):

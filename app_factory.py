@@ -14,6 +14,7 @@ from catalog import (
 )
 from config import Config
 from extensions import mysql
+from services.email_service import log_mail_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +323,10 @@ def create_app():
     )
     app.config.from_object(Config)
     app.config.setdefault("SEND_FILE_MAX_AGE_DEFAULT", 300)
+
+    with app.app_context():
+        log_mail_configuration("startup")
+        logger.info("APP_BASE_URL=%s ENVIRONMENT=%s", app.config.get("APP_BASE_URL"), app.config.get("ENVIRONMENT"))
 
     mysql.init_app(app)
     _register_filters(app)

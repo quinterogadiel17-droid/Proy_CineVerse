@@ -365,13 +365,18 @@ async function procesarCompra() {
     document.getElementById('modalResultado').classList.add('open');
 
     if (res.ok) {
+      const emailMessage = data.email_message || 'La compra fue exitosa.';
+      const emailHelp = data.email_error
+        ? `<p class="result-note">Detalle tecnico: ${data.email_error}</p>`
+        : '';
       document.getElementById('resultadoContent').innerHTML = `
         <div class="result-state result-success">
           <span class="result-kicker">Compra confirmada</span>
           <h2>Tu reserva esta lista</h2>
           <p>Total pagado: ${formatCurrency(data.total)}</p>
           <p>Metodo: ${data.metodo_pago}</p>
-          <p>${data.email_sent ? 'El tiquete fue enviado a tu correo.' : 'No se pudo enviar el correo en este entorno.'}</p>
+          <p>${emailMessage}</p>
+          ${emailHelp}
           <img src="data:image/png;base64,${data.qr}" alt="QR de compra" class="result-qr">
           <p class="result-code">${data.codigo}</p>
           <a href="/tiquete/${data.codigo}" class="btn btn-primary">Ver tiquete</a>
