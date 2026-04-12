@@ -1,14 +1,14 @@
-import os
-import uuid
-from pathlib import Path
+import base64
+import logging
+import re
 
 from werkzeug.utils import secure_filename
 
 from config import Config
 
+logger = logging.getLogger(__name__)
 
-def ensure_asset_directories():
-    Config.POSTER_UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+DATA_URL_RE = re.compile(r"^data:(?P<mime>image/[a-zA-Z0-9.+-]+);base64,(?P<data>.+)$")
 
 
 def is_allowed_image(filename):
@@ -18,38 +18,71 @@ def is_allowed_image(filename):
     return extension in Config.ALLOWED_IMAGE_EXTENSIONS
 
 
-def save_uploaded_poster(file_storage):
-    ensure_asset_directories()
+def _normalize_mime_type(mime_type):
+    return (mime_type or "").strip().lower()
+
+
+def _is_allowed_mime_type(mime_type):
+    return _normalize_mime_type(mime_type) in Config.ALLOWED_IMAGE_MIME_TYPES
+
+
+def _validate_size(size_bytes):
+    if size_bytes > Config.POSTER_MAX_BYTES:
+        raise ValueError(f"La imagen supera el maximo permitido ({Config.POSTER_MAX_BYTES} bytes).")
+
+
+def read_uploaded_poster_bytes(file_storage):
     original_name = secure_filename(file_storage.filename or "")
-    if not original_name or not is_allowed_image(original_name):
-        raise ValueError("Formato de imagen no permitido")
+    if not original_name:
+        raise ValueError("Debes seleccionar una imagen.")
+    if not is_allowed_image(original_name):
+        raise ValueError("Formato de imagen no permitido.")
 
-    extension = original_name.rsplit(".", 1)[1].lower()
-    unique_name = f"{uuid.uuid4().hex}.{extension}"
-    destination = Config.POSTER_UPLOAD_FOLDER / unique_name
-    file_storage.save(destination)
-    relative_path = f"/static/uploads/posters/{unique_name}"
-    return unique_name, relative_path
+    mime_type = _normalize_mime_type(file_storage.mimetype)
+    if not _is_allowed_mime_type(mime_type):
+        raise ValueError("Tipo MIME de imagen no permitido.")
+
+    payload = file_storage.read()
+    if not payload:
+        raise ValueError("El archivo de imagen esta vacio.")
+    _validate_size(len(payload))
+    return payload, mime_type
 
 
-def sync_asset_manifest(entries):
-    lines = [
-        "MANIFIESTO DE IMAGENES CINEVERSE",
-        "================================",
-        "",
-    ]
-    for entry in entries:
-        lines.extend(
-            [
-                f"Nombre de imagen: {entry['name']}",
-                f"Ruta: {entry['path']}",
-                f"Descripcion: {entry['description']}",
-                f"Ubicacion en UI: {entry['ui_location']}",
-                "-" * 40,
-            ]
-        )
+def build_data_url(image_bytes, mime_type):
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
-    Config.ASSET_MANIFEST.write_text("\n".join(lines), encoding="utf-8")
+
+def parse_data_url(data_url):
+    if not data_url:
+        return None, None
+
+    value = str(data_url).strip()
+    match = DATA_URL_RE.match(value)
+    if not match:
+        return None, None
+
+    mime_type = _normalize_mime_type(match.group("mime"))
+    if not _is_allowed_mime_type(mime_type):
+        raise ValueError("Tipo MIME de imagen no permitido.")
+
+    try:
+        image_bytes = base64.b64decode(match.group("data"), validate=True)
+    except Exception as exc:
+        raise ValueError("La imagen enviada no es valida.") from exc
+
+    if not image_bytes:
+        raise ValueError("La imagen enviada esta vacia.")
+    _validate_size(len(image_bytes))
+    return image_bytes, mime_type
+
+
+def resolve_poster_url(raw_url):
+    value = (raw_url or "").strip()
+    if not value:
+        return Config.DEFAULT_POSTER_URL
+    return value
 
 
 def append_asset_manifest(name, path, description, ui_location):
@@ -72,3 +105,23 @@ def append_asset_manifest(name, path, description, ui_location):
         current = "MANIFIESTO DE IMAGENES CINEVERSE\n================================\n\n"
 
     Config.ASSET_MANIFEST.write_text(current + block, encoding="utf-8")
+
+
+def log_storage_configuration(context="runtime"):
+    logger.info(
+        "STORAGE CONFIG [%s]: backend=%s poster_max_bytes=%s allowed_mime_types=%s",
+        context,
+        Config.IMAGE_STORAGE_BACKEND,
+        Config.POSTER_MAX_BYTES,
+        ",".join(sorted(Config.ALLOWED_IMAGE_MIME_TYPES)),
+    )
+
+
+def get_storage_configuration_status():
+    return {
+        "backend": Config.IMAGE_STORAGE_BACKEND,
+        "configured": Config.IMAGE_STORAGE_BACKEND == "db",
+        "poster_max_bytes": Config.POSTER_MAX_BYTES,
+        "allowed_mime_types": sorted(Config.ALLOWED_IMAGE_MIME_TYPES),
+        "missing": [] if Config.IMAGE_STORAGE_BACKEND == "db" else ["IMAGE_STORAGE_BACKEND=db"],
+    }

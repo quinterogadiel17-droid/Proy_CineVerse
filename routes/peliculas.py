@@ -1,13 +1,20 @@
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, session, url_for
 
 from catalog import PROJECTION_FORMATS
 from extensions import mysql
+from services.asset_service import parse_data_url, resolve_poster_url
 
 peliculas_bp = Blueprint("peliculas", __name__)
 
 
 def get_selected_location():
     return session.get("selected_city_id"), session.get("selected_sede_id")
+
+
+def _poster_url_for_row(row):
+    if row and row.get("has_poster_blob"):
+        return url_for("peliculas.poster_image", id=row["id"])
+    return resolve_poster_url(row.get("imagen_url") if row else None)
 
 
 @peliculas_bp.route("/cartelera")
@@ -61,20 +68,23 @@ def cartelera():
     cur = mysql.connection.cursor(dictionary=True)
     cur.execute(
         f"""
-        SELECT p.*,
-               GROUP_CONCAT(DISTINCT DATE_FORMAT(f.fecha, '%%d/%%m') ORDER BY f.fecha SEPARATOR ' · ') AS fechas,
-               GROUP_CONCAT(DISTINCT f.formato ORDER BY FIELD(f.formato, '2D', '3D', 'IMAX', 'VIP') SEPARATOR ', ') AS formatos,
-               GROUP_CONCAT(DISTINCT s.nombre ORDER BY s.nombre SEPARATOR ' · ') AS sedes,
-               MIN(f.precio) AS precio_desde,
-               COUNT(DISTINCT f.id) AS num_funciones,
-               COALESCE((SELECT ROUND(AVG(r.puntuacion), 1) FROM resenas r WHERE r.pelicula_id = p.id), 0) AS rating_promedio,
-               (SELECT COUNT(*) FROM resenas r2 WHERE r2.pelicula_id = p.id) AS total_resenas,
-               (
-                   SELECT COUNT(*)
-                   FROM tiquetes t
-                   JOIN funciones fx ON fx.id = t.funcion_id
-                   WHERE fx.pelicula_id = p.id AND t.estado != 'cancelado'
-               ) AS popularidad
+        SELECT
+            p.id, p.titulo, p.descripcion, p.duracion, p.genero, p.categoria, p.clasificacion,
+            p.imagen_url, p.trailer_url, p.estado, p.fecha_creacion,
+            CASE WHEN p.poster_blob IS NULL THEN 0 ELSE 1 END AS has_poster_blob,
+            GROUP_CONCAT(DISTINCT DATE_FORMAT(f.fecha, '%%d/%%m') ORDER BY f.fecha SEPARATOR ' - ') AS fechas,
+            GROUP_CONCAT(DISTINCT f.formato ORDER BY FIELD(f.formato, '2D', '3D', 'IMAX', 'VIP') SEPARATOR ', ') AS formatos,
+            GROUP_CONCAT(DISTINCT s.nombre ORDER BY s.nombre SEPARATOR ' - ') AS sedes,
+            MIN(f.precio) AS precio_desde,
+            COUNT(DISTINCT f.id) AS num_funciones,
+            COALESCE((SELECT ROUND(AVG(r.puntuacion), 1) FROM resenas r WHERE r.pelicula_id = p.id), 0) AS rating_promedio,
+            (SELECT COUNT(*) FROM resenas r2 WHERE r2.pelicula_id = p.id) AS total_resenas,
+            (
+                SELECT COUNT(*)
+                FROM tiquetes t
+                JOIN funciones fx ON fx.id = t.funcion_id
+                WHERE fx.pelicula_id = p.id AND t.estado != 'cancelado'
+            ) AS popularidad
         FROM peliculas p
         LEFT JOIN funciones f ON {' AND '.join(function_join_filters)}
         LEFT JOIN sedes s ON {' AND '.join(sede_join_filters)}
@@ -86,6 +96,8 @@ def cartelera():
         function_join_params + sede_join_params + city_join_params + where_params,
     )
     peliculas = cur.fetchall()
+    for movie in peliculas:
+        movie["imagen_url"] = _poster_url_for_row(movie)
 
     cur.execute(
         """
@@ -153,11 +165,22 @@ def detalle(id):
     selected_format = request.args.get("formato", "Todos").strip() or "Todos"
 
     cur = mysql.connection.cursor(dictionary=True)
-    cur.execute("SELECT * FROM peliculas WHERE id = %s", (id,))
+    cur.execute(
+        """
+        SELECT
+            id, titulo, descripcion, duracion, genero, categoria, clasificacion,
+            imagen_url, trailer_url, estado, fecha_creacion,
+            CASE WHEN poster_blob IS NULL THEN 0 ELSE 1 END AS has_poster_blob
+        FROM peliculas
+        WHERE id = %s
+        """,
+        (id,),
+    )
     pelicula = cur.fetchone()
     if not pelicula:
         cur.close()
         return redirect(url_for("peliculas.cartelera"))
+    pelicula["imagen_url"] = _poster_url_for_row(pelicula)
 
     cur.execute(
         """
@@ -309,9 +332,21 @@ def guardar_resena(id):
 @peliculas_bp.route("/api/peliculas")
 def api_peliculas():
     cur = mysql.connection.cursor(dictionary=True)
-    cur.execute("SELECT * FROM peliculas WHERE estado = 'activa' ORDER BY titulo")
+    cur.execute(
+        """
+        SELECT
+            id, titulo, descripcion, duracion, genero, categoria, clasificacion,
+            imagen_url, trailer_url, estado, fecha_creacion,
+            CASE WHEN poster_blob IS NULL THEN 0 ELSE 1 END AS has_poster_blob
+        FROM peliculas
+        WHERE estado = 'activa'
+        ORDER BY titulo
+        """
+    )
     peliculas = cur.fetchall()
     cur.close()
+    for movie in peliculas:
+        movie["imagen_url"] = _poster_url_for_row(movie)
     return jsonify(peliculas)
 
 
@@ -320,15 +355,23 @@ def api_crear_pelicula():
     if session.get("user_rol") != "admin":
         return jsonify({"error": "No autorizado"}), 403
 
-    data = request.get_json()
+    data = request.get_json() or {}
+    try:
+        poster_blob, poster_mime = parse_data_url(data.get("imagen_url"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    imagen_url = None if poster_blob else data.get("imagen_url")
+    if imagen_url:
+        imagen_url = resolve_poster_url(imagen_url)
+
     cur = mysql.connection.cursor(dictionary=True)
     cur.execute(
         """
         INSERT INTO peliculas (
             titulo, descripcion, duracion, genero, categoria,
-            clasificacion, imagen_url, trailer_url
+            clasificacion, imagen_url, poster_blob, poster_mime, trailer_url
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             data["titulo"],
@@ -337,7 +380,9 @@ def api_crear_pelicula():
             data.get("genero"),
             data.get("categoria", "Cartelera"),
             data.get("clasificacion"),
-            data.get("imagen_url"),
+            imagen_url,
+            poster_blob,
+            poster_mime,
             data.get("trailer_url"),
         ),
     )
@@ -352,16 +397,43 @@ def api_editar_pelicula(id):
     if session.get("user_rol") != "admin":
         return jsonify({"error": "No autorizado"}), 403
 
-    data = request.get_json()
+    data = request.get_json() or {}
     cur = mysql.connection.cursor(dictionary=True)
+    cur.execute("SELECT imagen_url, poster_blob, poster_mime FROM peliculas WHERE id = %s", (id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return jsonify({"error": "Pelicula no encontrada"}), 404
 
-    # Si el cliente no manda imagen_url (o manda None/vacío), conservamos
-    # la que ya está guardada en la BD para no borrar imágenes subidas.
     nueva_imagen = data.get("imagen_url")
-    if not nueva_imagen:
-        cur.execute("SELECT imagen_url FROM peliculas WHERE id = %s", (id,))
-        row = cur.fetchone()
-        nueva_imagen = row["imagen_url"] if row else None
+    nuevo_blob = row["poster_blob"]
+    nuevo_mime = row["poster_mime"]
+
+    if nueva_imagen:
+        poster_route_value = url_for("peliculas.poster_image", id=id)
+        if str(nueva_imagen).strip() == poster_route_value:
+            nueva_imagen = row["imagen_url"]
+            nuevo_blob = row["poster_blob"]
+            nuevo_mime = row["poster_mime"]
+        else:
+            try:
+                parsed_blob, parsed_mime = parse_data_url(nueva_imagen)
+            except ValueError as exc:
+                cur.close()
+                return jsonify({"error": str(exc)}), 400
+            if parsed_blob:
+                nuevo_blob = parsed_blob
+                nuevo_mime = parsed_mime
+                nueva_imagen = None
+            else:
+                nueva_imagen = resolve_poster_url(nueva_imagen)
+                nuevo_blob = None
+                nuevo_mime = None
+    else:
+        nueva_imagen = row["imagen_url"]
+        if nueva_imagen:
+            nuevo_blob = None
+            nuevo_mime = None
 
     cur.execute(
         """
@@ -373,6 +445,8 @@ def api_editar_pelicula(id):
             categoria = %s,
             clasificacion = %s,
             imagen_url = %s,
+            poster_blob = %s,
+            poster_mime = %s,
             trailer_url = %s,
             estado = %s
         WHERE id = %s
@@ -385,6 +459,8 @@ def api_editar_pelicula(id):
             data.get("categoria", "Cartelera"),
             data.get("clasificacion"),
             nueva_imagen,
+            nuevo_blob,
+            nuevo_mime,
             data.get("trailer_url"),
             data.get("estado", "activa"),
             id,
@@ -405,3 +481,31 @@ def api_eliminar_pelicula(id):
     mysql.connection.commit()
     cur.close()
     return jsonify({"mensaje": "Pelicula eliminada"})
+
+
+@peliculas_bp.route("/poster/<int:id>")
+def poster_image(id):
+    cur = mysql.connection.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT poster_blob, poster_mime, imagen_url
+        FROM peliculas
+        WHERE id = %s
+        """,
+        (id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+
+    if not row:
+        return redirect(resolve_poster_url(None))
+
+    poster_blob = row.get("poster_blob")
+    if poster_blob:
+        mime_type = row.get("poster_mime") or "application/octet-stream"
+        response = Response(poster_blob, mimetype=mime_type)
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        response.headers["Content-Length"] = str(len(poster_blob))
+        return response
+
+    return redirect(resolve_poster_url(row.get("imagen_url")))

@@ -1,11 +1,17 @@
 from collections import defaultdict
 from functools import wraps
+from uuid import uuid4
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
 from catalog import PROJECTION_FORMATS
 from extensions import mysql
-from services.asset_service import append_asset_manifest, save_uploaded_poster
+from services.asset_service import (
+    append_asset_manifest,
+    build_data_url,
+    read_uploaded_poster_bytes,
+    resolve_poster_url,
+)
 from services.email_service import generate_email_token, send_confirmation_email_async
 from services.reservation_service import (
     ReservationConflictError,
@@ -121,9 +127,23 @@ def dashboard():
 @admin_required
 def peliculas():
     cur = mysql.connection.cursor(dictionary=True)
-    cur.execute("SELECT * FROM peliculas ORDER BY fecha_creacion DESC")
+    cur.execute(
+        """
+        SELECT
+            id, titulo, descripcion, duracion, genero, categoria, clasificacion,
+            imagen_url, trailer_url, estado, fecha_creacion,
+            CASE WHEN poster_blob IS NULL THEN 0 ELSE 1 END AS has_poster_blob
+        FROM peliculas
+        ORDER BY fecha_creacion DESC
+        """
+    )
     movies = cur.fetchall()
     cur.close()
+    for movie in movies:
+        if movie.get("has_poster_blob"):
+            movie["imagen_url"] = url_for("peliculas.poster_image", id=movie["id"])
+        else:
+            movie["imagen_url"] = resolve_poster_url(movie.get("imagen_url"))
     return render_template("admin/peliculas.html", peliculas=movies)
 
 
@@ -743,13 +763,25 @@ def upload_poster():
         return jsonify({"error": "No se recibio ningun archivo"}), 400
 
     try:
-        name, relative_path = save_uploaded_poster(file_storage)
+        poster_bytes, mime_type = read_uploaded_poster_bytes(file_storage)
+        poster_data_url = build_data_url(poster_bytes, mime_type)
+        resource_name = f"db-preview-{uuid4().hex}"
         append_asset_manifest(
-            name=name,
-            path=relative_path,
-            description="Poster subido manualmente desde el panel admin",
-            ui_location="Modulo admin de peliculas y cartelera publica",
+            name=resource_name,
+            path="DB_BLOB_PREVIEW",
+            description="Poster procesado para persistencia en DB (BLOB)",
+            ui_location="Modulo admin de peliculas (previsualizacion)",
         )
-        return jsonify({"path": relative_path, "filename": name}), 201
+        return jsonify(
+            {
+                "path": poster_data_url,
+                "filename": resource_name,
+                "mime_type": mime_type,
+                "size_bytes": len(poster_bytes),
+            }
+        ), 201
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        current_app.logger.exception("Error subiendo poster: %s", exc)
+        return jsonify({"error": "No se pudo subir la imagen en este momento."}), 502

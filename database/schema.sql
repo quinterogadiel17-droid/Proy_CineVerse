@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS peliculas (
     categoria VARCHAR(80) NOT NULL DEFAULT 'Cartelera',
     clasificacion VARCHAR(10),
     imagen_url VARCHAR(500),
+    poster_blob MEDIUMBLOB,
+    poster_mime VARCHAR(100),
     trailer_url VARCHAR(500),
     estado ENUM('activa', 'inactiva') NOT NULL DEFAULT 'activa',
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

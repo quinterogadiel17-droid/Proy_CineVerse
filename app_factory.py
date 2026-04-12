@@ -15,6 +15,7 @@ from catalog import (
 )
 from config import Config
 from extensions import mysql
+from services.asset_service import get_storage_configuration_status, log_storage_configuration
 from services.email_service import get_mail_configuration_status, log_mail_configuration
 
 logger = logging.getLogger(__name__)
@@ -229,6 +230,7 @@ def _register_hooks(app):
             "api_city_sedes",
             "healthz",
             "healthz_mail",
+            "healthz_storage",
             "index",
             "auth.login",
             "auth.registro",
@@ -248,6 +250,8 @@ def _register_hooks(app):
         if request.endpoint.startswith("auth."):
             return
         if request.endpoint.startswith("peliculas.api_"):
+            return
+        if request.endpoint == "peliculas.poster_image":
             return
         if request.endpoint.startswith("funciones.api_"):
             return
@@ -303,6 +307,12 @@ def _register_routes(app):
         }
         http_status = 200 if status["configured"] else 503
         return jsonify(payload), http_status
+
+    @app.get("/healthz/storage")
+    def healthz_storage():
+        status = get_storage_configuration_status()
+        http_status = 200 if status.get("configured") else 503
+        return jsonify(status), http_status
 
     @app.route("/seleccionar-ubicacion", methods=["GET"])
     def choose_location():
@@ -389,6 +399,7 @@ def create_app():
 
     with app.app_context():
         log_mail_configuration("startup")
+        log_storage_configuration("startup")
         logger.info("APP_BASE_URL=%s ENVIRONMENT=%s", app.config.get("APP_BASE_URL"), app.config.get("ENVIRONMENT"))
 
     mysql.init_app(app)

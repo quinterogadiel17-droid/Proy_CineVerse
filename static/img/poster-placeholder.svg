@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="540" viewBox="0 0 360 540" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="360" y2="540" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#1B2A44"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="540" rx="24" fill="url(#bg)"/>
+  <rect x="40" y="60" width="280" height="420" rx="16" fill="#0F1B2D" stroke="#2A3A56"/>
+  <circle cx="180" cy="220" r="52" fill="#1E2F4A"/>
+  <path d="M157 190H203V250H157V190Z" fill="#8AA0C4"/>
+  <path d="M140 285C140 262.909 157.909 245 180 245C202.091 245 220 262.909 220 285V300H140V285Z" fill="#8AA0C4"/>
+  <text x="180" y="360" fill="#CBD5E1" font-family="Arial, sans-serif" font-size="22" text-anchor="middle">Poster</text>
+  <text x="180" y="392" fill="#94A3B8" font-family="Arial, sans-serif" font-size="16" text-anchor="middle">No disponible</text>
+</svg>

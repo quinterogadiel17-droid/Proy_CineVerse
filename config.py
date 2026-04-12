@@ -32,11 +32,18 @@ class Config:
     MYSQL_LOCATION_CACHE_SECONDS = int(os.getenv("DB_LOCATION_CACHE_SECONDS", "120"))
 
     PROJECT_ROOT = BASE_DIR
-    UPLOAD_FOLDER = BASE_DIR / "static" / "uploads"
-    POSTER_UPLOAD_FOLDER = UPLOAD_FOLDER / "posters"
     ASSET_MANIFEST = BASE_DIR / "assets_manifest.txt"
     MAX_CONTENT_LENGTH = 8 * 1024 * 1024
     ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "svg"}
+    DEFAULT_POSTER_URL = os.getenv("DEFAULT_POSTER_URL", "/static/img/poster-placeholder.svg")
+    IMAGE_STORAGE_BACKEND = os.getenv("IMAGE_STORAGE_BACKEND", "db").strip().lower()
+    POSTER_MAX_BYTES = int(os.getenv("POSTER_MAX_BYTES", str(2 * 1024 * 1024)))
+    ALLOWED_IMAGE_MIME_TYPES = {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/svg+xml",
+    }
 
     APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5000")
     EMAIL_TOKEN_SALT = os.getenv("EMAIL_TOKEN_SALT", "cinecol-email-confirmation")

@@ -156,11 +156,13 @@
 {{ super() }}
 <script>
 let peliculaEliminarId = null;
+let posterPayload = '';
 
 function abrirModal() {
   document.getElementById('modalTitulo').textContent = 'Nueva pelicula';
   document.getElementById('peliculaId').value = '';
   ['fTitulo', 'fDesc', 'fDuracion', 'fGenero', 'fTrailer', 'fImagen'].forEach(id => document.getElementById(id).value = '');
+  posterPayload = '';
   document.getElementById('fCategoria').value = 'Estreno';
   document.getElementById('fClasificacion').value = '';
   document.getElementById('fEstado').value = 'activa';
@@ -184,6 +186,7 @@ function editarPelicula(p) {
   document.getElementById('fEstado').value = p.estado || 'activa';
   document.getElementById('fTrailer').value = p.trailer_url || '';
   document.getElementById('fImagen').value = p.imagen_url || '';
+  posterPayload = '';
   if (p.imagen_url) {
     document.getElementById('posterImg').src = p.imagen_url;
     document.getElementById('previewPoster').style.display = 'block';
@@ -207,7 +210,7 @@ async function guardarPelicula() {
     genero: document.getElementById('fGenero').value,
     categoria: document.getElementById('fCategoria').value,
     clasificacion: document.getElementById('fClasificacion').value,
-    imagen_url: document.getElementById('fImagen').value,
+    imagen_url: posterPayload,
     trailer_url: document.getElementById('fTrailer').value,
     estado: document.getElementById('fEstado').value
   };
@@ -259,6 +262,7 @@ async function uploadPoster(file) {
   }
 
   document.getElementById('fImagen').value = data.path;
+  posterPayload = data.path;
   document.getElementById('posterImg').src = data.path;
   document.getElementById('previewPoster').style.display = 'block';
 }
